@@ -1,0 +1,363 @@
+@import "tailwindcss";
+
+@theme {
+  /* ------------------------------------------------------------- typography */
+  --font-display: var(--font-cormorant), "Cormorant Garamond", ui-serif, Georgia,
+    "Times New Roman", serif;
+  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+
+  /* ------------------------------------------------- plain luxury neutrals */
+  /* These flip with the theme — they describe the page and its text. */
+  --color-bone: #f7f4ef; /* page canvas — warm ivory            */
+  --color-linen: #fcfbf8; /* lightest panel / card               */
+  --color-bone-dark: #efe9e0; /* greige section band             */
+  --color-sand: #e5ded3; /* stone band                          */
+  --color-stone: #d6cdbf; /* deep stone                          */
+
+  --color-ink: #17150f;
+  --color-ink-700: #2b2721;
+  --color-ink-500: #4d4840;
+  --color-ink-300: #8c857b;
+
+  /* ------------------------------------------------------------- accents */
+  --color-brass: #a2834f; /* antique gold                        */
+  --color-brass-light: #d9c69d;
+  --color-ember: #7c2b2b; /* bordeaux — sale / alerts            */
+  --color-sage: #6d7362; /* muted sage text                     */
+  --color-sage-tint: #edeee8; /* soft sage band                  */
+  --color-ok: #3f7a4c; /* in stock / success                  */
+  --color-espresso: #241f1a;
+
+  /* -------------------------------------------------- theme-fixed tokens */
+  /* Used on imagery and on the always-dark editorial bands, so they must
+     never invert when the theme changes.                              */
+  --color-ivory: #f7f4ef; /* always-light foreground            */
+  --color-char: #17150f; /* always-dark foreground             */
+  --color-band: #17150f; /* always-dark section surface        */
+  --color-scrim: #0d0c0a; /* always-dark overlay                */
+
+  --shadow-lift: 0 30px 60px -30px rgb(23 21 15 / 0.3);
+  --shadow-panel: 0 1px 2px rgb(23 21 15 / 0.05), 0 14px 40px -14px rgb(23 21 15 / 0.16);
+
+  --animate-fade-up: fade-up 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 1.2s ease both;
+  --animate-marquee: marquee 42s linear infinite;
+  --animate-drawer-in: drawer-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-overlay-in: fade-in 0.35s ease both;
+  --animate-scale-in: scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-modal-in: modal-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-kenburns: kenburns 22s ease-in-out infinite alternate;
+  --animate-toast-in: toast-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-shimmer: shimmer 2.6s linear infinite;
+}
+
+/* ------------------------------------------------------------ dark theme */
+/* Every flipping token is redefined here; utilities reference the variables,
+   so the whole storefront re-themes without touching a single class. */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bone: #16140f;
+  --color-linen: #1d1a15;
+  --color-bone-dark: #241f19;
+  --color-sand: #2b2620;
+  --color-stone: #38322a;
+
+  --color-ink: #f1ede5;
+  --color-ink-700: #ffffff;
+  --color-ink-500: #c6bfb4;
+  --color-ink-300: #948d81;
+
+  --color-sage: #9cab8e;
+  --color-sage-tint: #20231d;
+  --color-ok: #7fbe8d;
+  --color-ember: #cf8a79;
+  --color-espresso: #cec6b8;
+
+  /* stays dark, but a step above the canvas so bands keep their presence */
+  --color-band: #211d17;
+
+  --shadow-lift: 0 30px 60px -30px rgb(0 0 0 / 0.7);
+  --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.45), 0 16px 44px -16px rgb(0 0 0 / 0.65);
+}
+
+html {
+  color-scheme: light;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 22px, 0) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes kenburns {
+  from {
+    transform: scale(1.02) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.14) translate3d(-1.5%, -2%, 0);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    overflow-x: clip;
+  }
+
+  body {
+    background-color: var(--color-bone);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    letter-spacing: -0.006em;
+    overflow-x: clip;
+    -webkit-font-smoothing: antialiased;
+    transition:
+      background-color 0.45s ease,
+      color 0.45s ease;
+  }
+
+  ::selection {
+    background-color: var(--color-ink);
+    color: var(--color-bone);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+
+  *:focus-visible {
+    outline: 1.5px solid var(--color-brass);
+    outline-offset: 3px;
+  }
+
+  img,
+  svg {
+    display: block;
+    max-width: 100%;
+  }
+}
+
+/* editorial small-caps label */
+.eyebrow {
+  font-size: 0.6875rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.display-xl {
+  font-family: var(--font-display);
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  font-weight: 500;
+}
+
+/* Cormorant is a light cut — nudge every display usage up one weight so
+   small headings keep their presence next to Inter body copy. */
+.font-display {
+  font-weight: 500;
+}
+
+/* theme switch icon — visibility is driven purely by the html attribute so
+   the correct icon paints on first frame with no hydration flicker */
+html:not([data-theme="dark"]) .icon-sun {
+  display: none;
+}
+
+html[data-theme="dark"] .icon-moon {
+  display: none;
+}
+
+/* scroll reveal */
+.reveal {
+  opacity: 0;
+  transform: translate3d(0, 30px, 0);
+  transition:
+    opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.reveal[data-visible="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* NOTE: no `display` is set here on purpose — it must never override the
+   `flex` / `block` utilities, otherwise sibling icons drop to the baseline. */
+.link-underline {
+  position: relative;
+}
+
+.link-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  height: 1px;
+  width: 100%;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.link-underline:hover::after,
+.link-underline[data-active="true"]::after {
+  transform: scaleX(1);
+}
+
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  mix-blend-mode: soft-light;
+  background-image: radial-gradient(rgb(255 255 255 / 0.4) 0.5px, transparent 0.5px);
+  background-size: 3px 3px;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #e9e3d9 25%, #f3f0ea 50%, #e9e3d9 75%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+html[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #211d17 25%, #2b2620 50%, #211d17 75%);
+  background-size: 200% 100%;
+}
+
+/* product card hover lift */
+.card-lift {
+  transition:
+    transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-lift:hover {
+  transform: translate3d(0, -5px, 0);
+  box-shadow: var(--shadow-lift);
+}
+
+/* even, self-balancing size / swatch grids */
+.auto-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(52px, 1fr));
+  gap: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  [class*="animate-"] {
+    animation: none !important;
+  }
+}
