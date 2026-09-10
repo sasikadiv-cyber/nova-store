@@ -70,8 +70,17 @@ export async function POST(request: Request) {
     METHOD_IDS.includes(payload.shippingMethod ?? "") ? payload.shippingMethod : "standard"
   ) as ShippingMethodId;
 
+  /* Placing an order requires a signed-in account. Enforced on the server so
+     the rule cannot be bypassed by calling this endpoint directly. */
+  const customer = await getCurrentCustomer();
+  if (!customer) {
+    return NextResponse.json(
+      { ok: false, error: "Please sign in to place an order.", needsAuth: true },
+      { status: 401 },
+    );
+  }
+
   try {
-    const customer = await getCurrentCustomer();
     const result = await createOrder({
       email,
       fullName,
@@ -82,7 +91,7 @@ export async function POST(request: Request) {
       postalCode,
       country,
       phone: (payload.phone ?? "").trim(),
-      customerId: customer?.id,
+      customerId: customer.id,
       shippingMethod,
       discountCode: (payload.discountCode ?? "").trim(),
       items,

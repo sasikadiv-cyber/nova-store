@@ -20,11 +20,16 @@ export function CartDrawer() {
     promoError,
     applyPromo,
     clearPromo,
+    customer,
     isOpen,
     closeCart,
     setQuantity,
     removeLine,
   } = useStore();
+
+  /* Orders require an account, so signed-out clients are sent to sign in —
+     the bag is preserved and they return to checkout afterwards. */
+  const checkoutHref = customer ? "/checkout" : "/account/login?next=/checkout";
 
   const [codeInput, setCodeInput] = useState("");
 
@@ -251,12 +256,17 @@ export function CartDrawer() {
               </div>
             </dl>
             <Link
-              href="/checkout"
+              href={checkoutHref}
               onClick={closeCart}
               className="mt-4 block w-full bg-ink py-4 text-center text-[11px] font-medium uppercase tracking-[0.22em] text-bone transition-colors hover:bg-ink-700"
             >
-              Checkout
+              {customer ? "Checkout" : "Sign in to check out"}
             </Link>
+            {!customer && (
+              <p className="mt-3 text-[11.5px] leading-relaxed text-ink-300">
+                An account is required to place an order — your bag is saved on this device.
+              </p>
+            )}
             <button
               type="button"
               onClick={closeCart}

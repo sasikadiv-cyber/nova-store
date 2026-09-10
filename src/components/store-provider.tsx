@@ -31,6 +31,12 @@ export type AddToCartInput = Omit<CartLine, "key" | "quantity"> & { quantity?: n
 
 export type Theme = "light" | "dark";
 
+export type SessionCustomer = {
+  id: number;
+  email: string;
+  fullName: string;
+};
+
 export type Promo = {
   code: string;
   label: string;
@@ -62,6 +68,8 @@ type StoreValue = {
   promoError: string | null;
   applyPromo: (code: string) => Promise<boolean>;
   clearPromo: () => void;
+  customer: SessionCustomer | null;
+  sessionReady: boolean;
   favourites: number[];
   favouritesReady: boolean;
   toggleFavourite: (productId: number) => Promise<"saved" | "removed" | "auth">;
@@ -100,6 +108,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [promoError, setPromoError] = useState<string | null>(null);
   const [favourites, setFavourites] = useState<number[]>([]);
   const [favouritesReady, setFavouritesReady] = useState(false);
+  const [customer, setCustomer] = useState<SessionCustomer | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const scrollLockRef = useRef(false);
@@ -153,6 +163,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       /* storage full or unavailable */
     }
   }, [lines, hydrated]);
+
+  /* Session first — the wishlist and checkout gating both depend on it. */
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/customer/session")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { authenticated?: boolean; customer?: SessionCustomer | null } | null) => {
+        if (cancelled) return;
+        setCustomer(payload?.authenticated ? (payload.customer ?? null) : null);
+        setSessionReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setSessionReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /* Wishlist lives on the account, so it is loaded once the store mounts. */
   useEffect(() => {
@@ -353,6 +381,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       totalCents: Math.max(0, subtotalCents - discountCents) + shippingCents,
       currency,
       theme,
+      customer,
+      sessionReady,
       favourites,
       favouritesReady,
       toggleFavourite,
@@ -378,6 +408,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     lines,
     currency,
     theme,
+    customer,
+    sessionReady,
     favourites,
     favouritesReady,
     toggleFavourite,

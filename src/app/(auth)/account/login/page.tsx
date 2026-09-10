@@ -23,6 +23,9 @@ export default async function LoginPage({
   void ensureDemoCustomer();
 
   const mode = params.mode === "signup" ? "signup" : "signin";
+  /* Send the client back where they came from — typically the checkout. */
+  const rawNext = typeof params.next === "string" ? params.next : "";
+  const redirectTo = rawNext.startsWith("/") ? rawNext : "/account";
   const error = typeof params.error === "string" ? params.error : null;
 
   const signup = mode === "signup";
@@ -65,7 +68,7 @@ export default async function LoginPage({
           </div>
         </div>
 
-        <LoginForm initialMode={mode} />
+        <LoginForm initialMode={mode} redirectTo={redirectTo} />
       </div>
     </div>
   );

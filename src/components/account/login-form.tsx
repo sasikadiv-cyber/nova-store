@@ -13,7 +13,14 @@ const label = "eyebrow block text-ink-300";
  * Posts to /api/customer/session rather than a server action, then hard-navigates
  * so the freshly created session is reflected immediately everywhere.
  */
-export function LoginForm({ initialMode }: { initialMode: "signin" | "signup" }) {
+export function LoginForm({
+  initialMode,
+  redirectTo = "/account",
+}: {
+  initialMode: "signin" | "signup";
+  /** Where to land after a successful sign in (e.g. back to checkout). */
+  redirectTo?: string;
+}) {
   const [signup, setSignup] = useState(initialMode === "signup");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +53,7 @@ export function LoginForm({ initialMode }: { initialMode: "signin" | "signup" })
         throw new Error(payload?.error ?? "Could not sign you in.");
       }
 
-      window.location.assign("/account");
+      window.location.assign(redirectTo);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not sign you in.");
       setPending(false);

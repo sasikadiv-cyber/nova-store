@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { customers } from "@/db/schema";
 import {
   createCustomerSession,
+  getCurrentCustomer,
   hashPassword,
   verifyPassword,
 } from "@/lib/customer-auth";
@@ -100,6 +101,22 @@ export async function POST(request: Request) {
   await createCustomerSession(customer.id);
   revalidatePath("/", "layout");
   return NextResponse.json({ ok: true, mode, name: customer.fullName });
+}
+
+/** Lightweight "who am I" check used by the bag and checkout UI. */
+export async function GET() {
+  const customer = await getCurrentCustomer();
+  if (!customer) {
+    return NextResponse.json({ authenticated: false, customer: null });
+  }
+  return NextResponse.json({
+    authenticated: true,
+    customer: {
+      id: customer.id,
+      email: customer.email,
+      fullName: customer.fullName,
+    },
+  });
 }
 
 export async function DELETE() {
