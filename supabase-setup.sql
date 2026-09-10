@@ -791,6 +791,24 @@ SELECT setval(pg_get_serial_sequence('favourites', 'id'), COALESCE((SELECT MAX(i
 SELECT setval(pg_get_serial_sequence('product_variants', 'id'), COALESCE((SELECT MAX(id) FROM product_variants), 0) + 1, FALSE);
 
 
+-- ---------------------------------------------------- Supabase API security
+-- This application uses its server-side PostgreSQL connection and its own
+-- signed-cookie authentication. No table is intended to be read through the
+-- public Supabase Data API. Enabling RLS with no public policies blocks anon
+-- and authenticated API roles; the server database role continues to work.
+ALTER TABLE collections      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customers        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_methods  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reviews          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subscribers      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE discount_codes   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_events      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE favourites        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_variants ENABLE ROW LEVEL SECURITY;
+
 -- ------------------------------------------------------------------- done
 -- Demo accounts
 --   store owner : your ADMIN_EMAIL / ADMIN_PASSWORD from the environment

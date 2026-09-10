@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -16,14 +15,41 @@ export default async function EditProductPage({
 }) {
   const { id } = await params;
   const productId = Number(id);
-  if (!Number.isFinite(productId)) notFound();
+  if (!Number.isFinite(productId)) return null;
 
   const [[product], allCollections] = await Promise.all([
     db.select().from(products).where(eq(products.id, productId)).limit(1),
     db.select().from(collections).orderBy(asc(collections.sortOrder)),
   ]);
 
-  if (!product) notFound();
+  /* A deleted or unknown product renders a message rather than throwing, so a
+     stale tab or bookmark never triggers a Server Components render error. */
+  if (!product) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-5 text-center">
+        <p className="eyebrow text-sage">Not found</p>
+        <h1 className="text-[clamp(1.9rem,4vw,2.8rem)]">That piece no longer exists</h1>
+        <p className="max-w-md text-[13.5px] leading-relaxed text-ink-300">
+          It may have been deleted from the catalogue. Pick another style to edit, or create a new
+          one.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/admin/products"
+            className="bg-ink px-8 py-3.5 text-[11px] font-medium uppercase tracking-[0.2em] text-bone transition-colors hover:bg-ink-700"
+          >
+            All products
+          </Link>
+          <Link
+            href="/admin/products/new"
+            className="border border-ink/15 px-8 py-3.5 text-[11px] font-medium uppercase tracking-[0.2em] transition-colors hover:bg-ink hover:text-bone"
+          >
+            Add a product
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

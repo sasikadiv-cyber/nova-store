@@ -48,6 +48,13 @@ export const metadata: Metadata = {
     description: "Small-run cashmere, outerwear and hand-finished shoes, shipped worldwide.",
     type: "website",
   },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/apple-icon.png", type: "image/png", sizes: "48x48" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "48x48" }],
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

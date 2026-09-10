@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 
 import { ReviewComposer } from "@/components/account/review-composer";
 import { Price } from "@/components/ui";
@@ -26,13 +25,33 @@ export default async function OrderDetailPage({
 }) {
   const { id } = await params;
   const orderId = Number(id);
-  if (!Number.isFinite(orderId)) notFound();
+  if (!Number.isFinite(orderId)) return null;
 
   const customer = await getCurrentCustomer();
   if (!customer) return null;
 
   const result = await getCustomerOrder(customer.id, orderId);
-  if (!result) notFound();
+
+  /* Unknown or not-yours renders a message instead of throwing, so a stale
+     link or bookmark never triggers a Server Components render error. */
+  if (!result) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-5 text-center">
+        <p className="eyebrow text-sage">Not found</p>
+        <h1 className="text-[clamp(1.9rem,4vw,2.8rem)]">We cannot find that order</h1>
+        <p className="max-w-md text-[13.5px] leading-relaxed text-ink-300">
+          It may belong to a different account, or it was removed. All of your orders are listed
+          below.
+        </p>
+        <Link
+          href="/account/orders"
+          className="mt-2 bg-ink px-8 py-3.5 text-[11px] font-medium uppercase tracking-[0.2em] text-bone transition-colors hover:bg-ink-700"
+        >
+          All my orders
+        </Link>
+      </div>
+    );
+  }
 
   const { order, items, events } = result;
   const reviewed = new Set(
