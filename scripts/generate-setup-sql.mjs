@@ -209,6 +209,12 @@ CREATE TABLE IF NOT EXISTS order_events (
 );
 CREATE INDEX IF NOT EXISTS order_events_order_idx ON order_events (order_id);
 
+CREATE TABLE IF NOT EXISTS site_settings (
+  key        text PRIMARY KEY,
+  value      text NOT NULL DEFAULT '',
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS favourites (
   id          serial PRIMARY KEY,
   customer_id integer NOT NULL REFERENCES customers (id) ON DELETE CASCADE,
@@ -358,6 +364,14 @@ out.push(
   ),
 );
 
+/* site appearance — hero media and copy the owner has customised */
+const settings = await client.query("SELECT * FROM site_settings ORDER BY key");
+out.push(
+  settings.rows.length
+    ? `INSERT INTO site_settings (key, value, updated_at) VALUES\n${values(settings.rows, (r) => `(${lit(r.key)}, ${lit(r.value)}, ${lit(r.updated_at)})`)}\nON CONFLICT (key) DO NOTHING;`
+    : "-- site_settings: no rows (the storefront falls back to its built-in defaults)",
+);
+
 /* favourites */
 const favs = await client.query("SELECT * FROM favourites ORDER BY id");
 out.push(
@@ -411,6 +425,7 @@ ALTER TABLE orders            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_events      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE favourites        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE site_settings     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE product_variants ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------------------------------- done

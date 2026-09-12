@@ -137,16 +137,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (rawCurrency && /^[A-Z]{3}$/.test(rawCurrency)) {
         setCurrencyState(rawCurrency as CurrencyCode);
       }
+      /* Light is the storefront default. Only an explicitly saved choice — or an
+         explicit toggle — switches to dark. */
       const storedTheme = window.localStorage.getItem(THEME_KEY);
-      const prefersDark =
-        !storedTheme &&
-        window.matchMedia?.("(prefers-color-scheme: dark)").matches === true;
-      const nextTheme: Theme =
-        storedTheme === "dark" || storedTheme === "light"
-          ? storedTheme
-          : prefersDark
-            ? "dark"
-            : "light";
+      const nextTheme: Theme = storedTheme === "dark" ? "dark" : "light";
       setThemeState(nextTheme);
       applyTheme(nextTheme);
     } catch {

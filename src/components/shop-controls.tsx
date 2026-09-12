@@ -146,7 +146,7 @@ export function ShopControls({ facets, state }: Props) {
                   }`}
                 >
                   {active && (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f8f5f0" strokeWidth="3">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                       <path d="M4 12.5l5 5L20 6.5" />
                     </svg>
                   )}
@@ -178,12 +178,12 @@ export function ShopControls({ facets, state }: Props) {
               >
                 {preset.label}
                 <span
-                  className={`h-[13px] w-[13px] shrink-0 border transition-colors ${
-                    active ? "border-ink bg-ink" : "border-ink/25"
+                  className={`grid h-[13px] w-[13px] shrink-0 place-items-center border transition-colors ${
+                    active ? "border-ink bg-ink text-bone" : "border-ink/25"
                   }`}
                 >
                   {active && (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f7f4ef" strokeWidth="3">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                       <path d="M4 12.5l5 5L20 6.5" />
                     </svg>
                   )}
@@ -329,7 +329,7 @@ function Check({
         }`}
       >
         {checked && (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f8f5f0" strokeWidth="3">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
             <path d="M4 12.5l5 5L20 6.5" />
           </svg>
         )}

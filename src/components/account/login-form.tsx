@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { DEMO_CUSTOMER } from "@/lib/demo-account";
 
 const field =
   "mt-2 w-full border border-ink/15 bg-bone px-3.5 py-3 text-[14px] outline-none transition-colors focus:border-ink";

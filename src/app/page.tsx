@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ProductCard } from "@/components/product-card";
 import { Price, Reveal, Stars } from "@/components/ui";
 import { px } from "@/lib/seed-data";
+import { getAppearance } from "@/lib/site-settings";
 import {
   getBestSellers,
   getCollections,
@@ -14,12 +15,9 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/* Self-hosted, fast-start clips — 1.4MB and 9–14s, so they play instantly. */
-const HERO_VIDEO = "/videos/hero.mp4";
-const HERO_POSTER = "/videos/hero-poster.jpg";
-const ATELIER_VIDEO = "/videos/atelier.mp4";
-const ATELIER_POSTER = "/videos/atelier-poster.jpg";
-const EDITORIAL_IMAGE_ALT = px(14641430, { w: 1000, h: 1250 });
+/* Hero and editorial media come from Site appearance (admin → appearance),
+   so the owner can swap films and copy without touching the code. */
+const ATELIER_IMAGE_FALLBACK = px(14641430, { w: 1000, h: 1250 });
 
 const PROMISES = [
   {
@@ -41,12 +39,13 @@ const PROMISES = [
 ];
 
 export default async function HomePage() {
-  const [collections, featured, newArrivals, bestSellers, stats] = await Promise.all([
+  const [collections, featured, newArrivals, bestSellers, stats, appearance] = await Promise.all([
     getCollections(),
     getFeatured(8),
     getNewArrivals(4),
     getBestSellers(4),
     getStorefrontStats(),
+    getAppearance(),
   ]);
 
   const heroProduct = featured[0];
@@ -64,35 +63,32 @@ export default async function HomePage() {
             loop
             playsInline
             preload="auto"
-            poster={HERO_POSTER}
+            poster={appearance.hero_poster}
             disablePictureInPicture
             aria-hidden="true"
             tabIndex={-1}
           >
-            <source src={HERO_VIDEO} type="video/mp4" />
+            <source src={appearance.hero_video} type="video/mp4" />
           </video>
           <div className="absolute inset-0 bg-gradient-to-t from-band/92 via-band/45 to-band/60" />
         </div>
 
-        <div className="relative z-10 mx-auto w-full max-w-[1600px] px-5 pb-12 pt-20 text-ivory md:px-10 md:pb-16">
+        <div className="relative z-10 mx-auto w-full max-w-[1600px] px-5 pb-16 pt-20 text-ivory md:px-10 md:pb-24">
           <div className="max-w-3xl">
-            <p className="eyebrow animate-fade-up text-ivory/70">
-              Autumn — Winter 2026 · Global Edition
-            </p>
+            <p className="eyebrow animate-fade-up text-ivory/70">{appearance.hero_eyebrow}</p>
             <h1
               className="display-xl mt-5 animate-fade-up text-[clamp(2.9rem,7.6vw,7rem)]"
               style={{ animationDelay: "120ms" }}
             >
-              Quiet luxury,
+              {appearance.hero_heading_line1}
               <br />
-              <span className="italic text-brass-light">made to travel.</span>
+              <span className="italic text-brass-light">{appearance.hero_heading_line2}</span>
             </h1>
             <p
               className="mt-6 max-w-lg animate-fade-up text-[14.5px] leading-relaxed text-ivory/75 md:text-base"
               style={{ animationDelay: "240ms" }}
             >
-              Double-faced wool from Biella. Grade-A cashmere from Inner Mongolia. Hand-finished
-              footwear from Porto. Cut in small runs and delivered to 94 countries — duties included.
+              {appearance.hero_body}
             </p>
 
             <div
@@ -100,19 +96,19 @@ export default async function HomePage() {
               style={{ animationDelay: "360ms" }}
             >
               <Link
-                href="/shop?collection=winter-edit"
+                href={appearance.hero_cta_href}
                 className="group relative overflow-hidden bg-ivory px-8 py-4 text-[11px] font-medium uppercase tracking-[0.22em] text-char sm:px-10"
               >
                 <span className="relative z-10 transition-colors duration-500 group-hover:text-ivory">
-                  Shop the winter edit
+                  {appearance.hero_cta_label}
                 </span>
                 <span className="absolute inset-0 -translate-y-full bg-char transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-y-0" />
               </Link>
               <Link
-                href="/shop?sort=newest"
+                href={appearance.hero_secondary_href}
                 className="link-underline py-1 text-[11px] font-medium uppercase tracking-[0.22em] text-ivory"
               >
-                Explore new arrivals
+                {appearance.hero_secondary_label}
               </Link>
             </div>
           </div>
@@ -175,15 +171,68 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* -------------------------------------------------- seasonal offer */}
+      {/* Sits below the hero in normal flow. Extra top margin keeps the card
+          clear of the hero content; the bottom stays flush with the next
+          section, so only the top is adjusted. */}
+      {appearance.promo_enabled === "true" && (
+        <section className="mt-48 border-y border-sand bg-linen md:mt-72">
+          <div className="mx-auto grid w-full max-w-[1600px] items-stretch gap-0 lg:grid-cols-2">
+            <div className="relative min-h-[240px] overflow-hidden bg-bone-dark lg:min-h-[420px]">
+              {appearance.promo_image && (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={appearance.promo_image}
+                  alt={appearance.promo_title}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-ink/40 to-transparent" />
+            </div>
+
+            <div className="flex flex-col justify-center gap-5 p-7 md:p-14">
+              <p className="eyebrow text-brass">{appearance.promo_eyebrow}</p>
+              <h2 className="text-[clamp(1.9rem,4vw,3.2rem)] leading-[1.05]">
+                {appearance.promo_title}
+              </h2>
+              <p className="max-w-lg text-[14.5px] leading-relaxed text-ink-500">
+                {appearance.promo_body}
+              </p>
+
+              {appearance.promo_code && (
+                <div className="flex items-center gap-3">
+                  <span className="border border-dashed border-brass bg-brass/10 px-4 py-2.5 font-mono text-[14px] tracking-[0.16em] text-ink">
+                    {appearance.promo_code}
+                  </span>
+                  <span className="text-[11.5px] uppercase tracking-[0.14em] text-ink-300">
+                    Apply at checkout
+                  </span>
+                </div>
+              )}
+
+              {appearance.promo_cta_label && (
+                <Link
+                  href={appearance.promo_cta_href || "/shop"}
+                  className="mt-2 inline-flex w-fit items-center gap-3 bg-ink px-9 py-4 text-[11px] font-medium uppercase tracking-[0.22em] text-bone transition-colors hover:bg-ink-700"
+                >
+                  {appearance.promo_cta_label}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
+                    <path d="M4 12h15M13 6l6 6-6 6" />
+                  </svg>
+                </Link>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ---------------------------------------------- featured collections */}
       <section className="mx-auto w-full max-w-[1600px] px-5 py-20 md:px-10 md:py-28">
         <Reveal className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="eyebrow text-sage">Featured collections</p>
+            <p className="eyebrow text-sage">{appearance.features_eyebrow}</p>
             <h2 className="mt-4 text-[clamp(2rem,4.4vw,3.8rem)]">
-              Three edits, one
-              <span className="italic text-brass"> quiet </span>
-              point of view
+              {appearance.features_heading}
             </h2>
           </div>
           <Link
@@ -253,10 +302,10 @@ export default async function HomePage() {
         <div className="mx-auto w-full max-w-[1600px] px-5 md:px-10">
           <Reveal className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="eyebrow text-sage">Just landed</p>
-              <h2 className="mt-4 text-[clamp(2rem,4.4vw,3.8rem)]">New arrivals</h2>
+              <p className="eyebrow text-sage">{appearance.new_in_eyebrow}</p>
+              <h2 className="mt-4 text-[clamp(2rem,4.4vw,3.8rem)]">{appearance.new_in_heading}</h2>
               <p className="mt-4 max-w-md text-[14px] leading-relaxed text-ink-300">
-                Fresh from the ateliers — released in quantities of a few hundred, and rarely repeated.
+                {appearance.new_in_body}
               </p>
             </div>
             <Link
@@ -289,18 +338,18 @@ export default async function HomePage() {
                 loop
                 playsInline
                 preload="metadata"
-                poster={ATELIER_POSTER}
+                poster={appearance.atelier_poster}
                 disablePictureInPicture
                 aria-hidden="true"
                 tabIndex={-1}
               >
-                <source src={ATELIER_VIDEO} type="video/mp4" />
+                <source src={appearance.atelier_video} type="video/mp4" />
               </video>
             </div>
             <div className="absolute bottom-0 right-0 w-[42%] overflow-hidden border-[10px] border-bone-dark shadow-lift">
               <div className="relative aspect-3/4">
                 <Image
-                  src={EDITORIAL_IMAGE_ALT}
+                  src={appearance.editorial_image}
                   alt="Detail of the knit used across the Essentials collection"
                   fill
                   sizes="320px"
@@ -311,17 +360,12 @@ export default async function HomePage() {
           </Reveal>
 
           <Reveal delay={140}>
-            <p className="eyebrow text-sage">The Nova method</p>
+            <p className="eyebrow text-sage">{appearance.method_eyebrow}</p>
             <h2 className="mt-4 text-[clamp(2rem,4.2vw,3.6rem)]">
-              We would rather make
-              <span className="italic text-brass"> fewer, better </span>
-              things
+              {appearance.method_heading}
             </h2>
             <p className="mt-6 text-[15px] leading-relaxed text-ink-500">
-              Every Nova piece begins with a fabric decision. We buy from eleven family-run mills and
-              one atelier in Porto, visit them three times a year, and cut each style in runs of 150
-              to 600 units — small enough to keep the finishing hand-done, large enough to keep the
-              price honest.
+              {appearance.method_body}
             </p>
 
             <div className="mt-10 grid gap-px overflow-hidden border border-sand bg-sand sm:grid-cols-2">
@@ -355,10 +399,9 @@ export default async function HomePage() {
       <section className="mx-auto w-full max-w-[1600px] px-5 py-20 md:px-10 md:py-28">
         <Reveal className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="eyebrow text-sage">Most loved</p>
+            <p className="eyebrow text-sage">{appearance.best_eyebrow}</p>
             <h2 className="mt-4 text-[clamp(2rem,4.4vw,3.8rem)]">
-              The pieces our clients
-              <span className="italic text-brass"> reorder</span>
+              {appearance.best_heading}
             </h2>
           </div>
           <Link
@@ -382,10 +425,9 @@ export default async function HomePage() {
       <section className="bg-band py-20 text-ivory md:py-28">
         <div className="mx-auto w-full max-w-[1600px] px-5 md:px-10">
           <Reveal className="max-w-2xl">
-            <p className="eyebrow text-ivory/45">Service, globally</p>
+            <p className="eyebrow text-ivory/45">{appearance.service_eyebrow}</p>
             <h2 className="mt-4 text-[clamp(2rem,4.2vw,3.4rem)]">
-              Shopping across borders should feel
-              <span className="italic text-brass-light"> effortless</span>
+              {appearance.service_heading}
             </h2>
           </Reveal>
 
@@ -404,7 +446,7 @@ export default async function HomePage() {
       <section className="bg-sand py-20 md:py-28">
         <div className="mx-auto w-full max-w-[1600px] px-5 md:px-10">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow text-sage">Client notes</p>
+            <p className="eyebrow text-sage">{appearance.notes_eyebrow}</p>
             <h2 className="mt-4 text-[clamp(2rem,4.2vw,3.4rem)]">
               {stats.avgRating.toFixed(1)} average from {stats.reviews} verified reviews
             </h2>
@@ -458,11 +500,10 @@ export default async function HomePage() {
       <section className="bg-sage-tint py-20 md:py-24">
         <div className="mx-auto flex w-full max-w-[1600px] flex-col items-center px-5 text-center md:px-10">
           <Reveal className="flex flex-col items-center">
-            <p className="eyebrow text-sage">Members receive first access</p>
-            <h2 className="mt-5 text-[clamp(2.2rem,5.4vw,4.6rem)]">Join the Nova list</h2>
+            <p className="eyebrow text-sage">{appearance.join_eyebrow}</p>
+            <h2 className="mt-5 text-[clamp(2.2rem,5.4vw,4.6rem)]">{appearance.join_heading}</h2>
             <p className="mt-5 max-w-xl text-[14.5px] leading-relaxed text-ink-500">
-              Ten percent off your first order, early access to limited runs, and a monthly note on how
-              things are actually made. No noise.
+              {appearance.join_body}
             </p>
             <Link
               href="/shop"

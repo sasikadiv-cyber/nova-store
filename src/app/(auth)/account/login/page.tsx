@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { ensureDemoCustomer } from "@/lib/customer-queries";
-import { DEMO_CUSTOMER } from "@/lib/demo-account";
 import { LoginForm } from "@/components/account/login-form";
 
 export const dynamic = "force-dynamic";
@@ -58,14 +57,6 @@ export default async function LoginPage({
             ))}
           </ul>
 
-          <div className="mt-10 border border-sand bg-linen p-5">
-            <p className="eyebrow text-sage">Demo account</p>
-            <p className="mt-2.5 text-[13px] leading-relaxed text-ink-500">
-              Email <span className="text-ink">{DEMO_CUSTOMER.email}</span>
-              <br />
-              Password <span className="text-ink">{DEMO_CUSTOMER.password}</span>
-            </p>
-          </div>
         </div>
 
         <LoginForm initialMode={mode} redirectTo={redirectTo} />

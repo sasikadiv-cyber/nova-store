@@ -26,7 +26,36 @@ const AUDIENCE_LINKS = [
   { href: "/shop?genders=Women", label: "Women" },
 ];
 
-export function SiteHeader() {
+export type HeaderNav = {
+  home: string;
+  collections: string;
+  footwear: string;
+  outerwear: string;
+  shopAll: string;
+  myAccount: string;
+};
+
+export type HeaderAnnouncement = {
+  enabled: boolean;
+  text: string;
+  linkLabel: string;
+  linkHref: string;
+};
+
+export function SiteHeader({
+  nav = {
+    home: "Home",
+    collections: "Collections",
+    footwear: "Footwear",
+    outerwear: "Outerwear",
+    shopAll: "Shop All",
+    myAccount: "My Account",
+  },
+  announcement,
+}: {
+  nav?: HeaderNav;
+  announcement?: HeaderAnnouncement;
+}) {
   const { itemCount, openCart, currency, setCurrency, toggleTheme } = useStore();
   const pathname = usePathname();
   const router = useRouter();
@@ -72,8 +101,28 @@ export function SiteHeader() {
     setSearchOpen(false);
   };
 
+  const showAnnouncement = Boolean(announcement?.enabled && announcement.text.trim());
+
   return (
     <>
+      {showAnnouncement && (
+        <div className="border-b border-ink/10 bg-ink text-bone">
+          <div className="mx-auto flex min-h-[34px] w-full max-w-[1600px] flex-wrap items-center justify-center gap-x-4 gap-y-1 px-5 py-2 md:px-10">
+            <p className="text-center text-[11px] tracking-[0.08em] text-bone/90">
+              {announcement!.text}
+            </p>
+            {announcement!.linkLabel.trim() && (
+              <Link
+                href={announcement!.linkHref || "/shop"}
+                className="link-underline shrink-0 text-[10px] font-medium uppercase tracking-[0.16em] text-brass-light"
+              >
+                {announcement!.linkLabel}
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+
       <header
         className={`sticky top-0 z-[110] transition-colors duration-500 ${
           overBand
@@ -97,7 +146,7 @@ export function SiteHeader() {
 
             <nav className="hidden items-center gap-8 text-[11.5px] font-medium uppercase tracking-[0.16em] lg:flex">
               <Link href="/" className="link-underline py-2">
-                Home
+                {nav.home}
               </Link>
 
               <div
@@ -111,7 +160,7 @@ export function SiteHeader() {
                   onClick={() => setCollectionOpen((value) => !value)}
                   className="link-underline flex items-center gap-1.5 py-2"
                 >
-                  <span>Collections</span>
+                  <span>{nav.collections}</span>
                   <svg
                     width="10"
                     height="10"
@@ -176,8 +225,8 @@ export function SiteHeader() {
               </div>
 
               {NAV_LINKS.map((link) => (
-                <Link key={link.label} href={link.href} className="link-underline py-2">
-                  {link.label}
+                <Link key={link.href} href={link.href} className="link-underline py-2">
+                  {link.href.includes("Footwear") ? nav.footwear : nav.outerwear}
                 </Link>
               ))}
             </nav>
@@ -337,14 +386,15 @@ export function SiteHeader() {
 
           <nav className="mt-9 flex flex-col">
             {[
-              { href: "/", label: "Home" },
-              { href: "/account", label: "My Account" },
-              { href: "/shop", label: "Shop All" },
+              { href: "/", label: nav.home },
+              { href: "/account", label: nav.myAccount },
+              { href: "/shop", label: nav.shopAll },
               ...AUDIENCE_LINKS,
-              ...NAV_LINKS,
+              { href: NAV_LINKS[0].href, label: nav.footwear },
+              { href: NAV_LINKS[1].href, label: nav.outerwear },
             ].map((link) => (
               <Link
-                key={link.label}
+                key={link.href + link.label}
                 href={link.href}
                 className="border-b border-ink/8 py-4 font-display text-[26px] leading-none"
               >

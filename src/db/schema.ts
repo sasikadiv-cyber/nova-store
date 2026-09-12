@@ -187,6 +187,16 @@ export const productVariants = pgTable(
 export type ProductVariant = typeof productVariants.$inferSelect;
 
 /** Pieces a signed-in client has saved to their wishlist. */
+/**
+ * Storefront appearance and copy that the shop owner edits from the console:
+ * hero media, story video and hero wording. Shop products are unaffected.
+ */
+export const siteSettings = pgTable("site_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const favourites = pgTable(
   "favourites",
   {

@@ -126,12 +126,12 @@ export default async function OrderDetailPage({
               return (
                 <div key={step.id} className="relative flex flex-col items-center">
                   <span
-                    className={`grid h-5 w-5 place-items-center rounded-full border-2 bg-linen transition-colors ${
+                    className={`grid h-5 w-5 place-items-center rounded-full border-2 bg-linen text-ink transition-colors ${
                       done ? "border-brass bg-brass" : "border-sand"
                     }`}
                   >
                     {done && (
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#f7f4ef" strokeWidth="3.5">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
                         <path d="M4 12.5l5 5L20 6.5" />
                       </svg>
                     )}
