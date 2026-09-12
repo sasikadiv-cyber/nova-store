@@ -27,6 +27,15 @@ export function PromoPopup({ content }: { content: PromoPopupContent }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  function close() {
+    setOpen(false);
+    try {
+      window.localStorage.setItem(DISMISS_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }
+
   useEffect(() => {
     try {
       if (window.localStorage.getItem(DISMISS_KEY) === "1") return;
@@ -52,14 +61,6 @@ export function PromoPopup({ content }: { content: PromoPopupContent }) {
     };
   }, [open]);
 
-  function close() {
-    setOpen(false);
-    try {
-      window.localStorage.setItem(DISMISS_KEY, "1");
-    } catch {
-      /* ignore */
-    }
-  }
 
   async function copyCode() {
     try {

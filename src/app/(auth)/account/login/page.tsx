@@ -39,7 +39,7 @@ export default async function LoginPage({
           </h1>
           <p className="mt-5 max-w-md text-[14.5px] leading-relaxed text-ink-500">
             {signup
-              ? "Keep your orders, tracking, reviews and payment details in one place — and check out in a couple of taps."
+              ? "Keep your orders, tracking and reviews in one place — and check out in a couple of taps."
               : "Sign in to follow your deliveries, review your pieces and check out faster."}
           </p>
 

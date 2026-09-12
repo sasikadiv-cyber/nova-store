@@ -306,32 +306,7 @@ export function SiteHeader({
               </svg>
             </button>
 
-            <label className="hidden lg:flex">
-              <span className="sr-only">Currency</span>
-              <select
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
-                className="cursor-pointer appearance-none bg-transparent px-2 text-[12px] font-medium uppercase tracking-[0.14em] outline-none transition-opacity hover:opacity-60"
-              >
-                {CURRENCY_LIST.map((item) => (
-                  <option key={item.code} value={item.code} className="text-ink">
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <Link
-              href="/account"
-              aria-label="My account"
-              title="My account"
-              className="grid h-10 w-10 place-items-center transition-opacity hover:opacity-60"
-            >
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
-                <circle cx="12" cy="8.2" r="3.8" />
-                <path d="M4.5 20.5c1.4-4 4.2-6 7.5-6s6.1 2 7.5 6" />
-              </svg>
-            </Link>
+            <AccountMenu currency={currency} setCurrency={setCurrency} />
 
             <button
               type="button"
@@ -439,5 +414,246 @@ export function SiteHeader({
         </div>
       </div>
     </>
+  );
+}
+
+/* ------------------------------------------------------------ account menu */
+
+type SessionCustomer = { id: number; email: string; fullName: string } | null;
+
+const LOCATIONS = [
+  "France",
+  "United Kingdom",
+  "United States",
+  "Germany",
+  "Netherlands",
+  "Sri Lanka",
+  "Singapore",
+  "United Arab Emirates",
+  "Japan",
+  "Australia",
+];
+
+const ACCOUNT_LINKS = [
+  { href: "/account", label: "Profile" },
+  { href: "/account/orders", label: "Orders & tracking" },
+  { href: "/account/favourites", label: "Wishlist" },
+];
+
+function initialsOf(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+/**
+ * The account button opens a panel instead of jumping straight to the account
+ * page — the way large storefronts do it. Holds the session summary, quick
+ * links, the currency and shipping location pickers, and sign out.
+ */
+function AccountMenu({
+  currency,
+  setCurrency,
+}: {
+  currency: CurrencyCode;
+  setCurrency: (code: CurrencyCode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [customer, setCustomer] = useState<SessionCustomer>(null);
+  const [location, setLocation] = useState(LOCATIONS[0]);
+  const [busy, setBusy] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  /* Who is signed in — rechecked every time the panel opens. */
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    fetch("/api/customer/session")
+      .then((response) => response.json())
+      .then((data) => {
+        if (active) setCustomer(data?.customer ?? null);
+      })
+      .catch(() => {
+        /* keep whatever we already know */
+      });
+    return () => {
+      active = false;
+    };
+  }, [open]);
+
+  /* The shipping location is a browser preference, like the currency. */
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("nova.location");
+      if (stored && LOCATIONS.includes(stored)) setLocation(stored);
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+
+  /* Click outside or press Escape to close. */
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  function chooseLocation(value: string) {
+    setLocation(value);
+    try {
+      window.localStorage.setItem("nova.location", value);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function signOut() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fetch("/api/customer/session", { method: "DELETE" });
+      window.location.assign("/");
+    } catch {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="relative" ref={panelRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-label="My account"
+        aria-expanded={open}
+        title="My account"
+        className="grid h-10 w-10 place-items-center transition-opacity hover:opacity-60"
+      >
+        {customer ? (
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-ink text-[11px] font-medium tracking-[0.06em] text-bone">
+            {initialsOf(customer.fullName) || "N"}
+          </span>
+        ) : (
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
+            <circle cx="12" cy="8.2" r="3.8" />
+            <path d="M4.5 20.5c1.4-4 4.2-6 7.5-6s6.1 2 7.5 6" />
+          </svg>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+12px)] z-[170] w-[290px] max-w-[calc(100vw-2.5rem)] border border-sand bg-linen text-ink shadow-lift">
+          {/* ------------------------------------------------ session summary */}
+          <div className="flex items-center gap-3.5 border-b border-sand px-5 py-5">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-ink text-[13px] font-medium tracking-[0.06em] text-bone">
+              {customer ? initialsOf(customer.fullName) || "N" : "?"}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[14px]">
+                {customer ? customer.fullName : "Welcome to Nova"}
+              </span>
+              <span className="mt-0.5 block truncate text-[12px] text-ink-300">
+                {customer ? customer.email : "Sign in to see your orders"}
+              </span>
+            </span>
+          </div>
+
+          {/* ------------------------------------------------------ quick links */}
+          <nav className="py-2">
+            {ACCOUNT_LINKS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className="flex items-center justify-between px-5 py-2.5 text-[13px] text-ink-500 transition-colors hover:bg-bone hover:text-ink"
+              >
+                {item.label}
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
+                  <path d="M4 12h15M13 6l6 6-6 6" />
+                </svg>
+              </Link>
+            ))}
+          </nav>
+
+          {/* ------------------------------------------- currency and location */}
+          <div className="space-y-4 border-t border-sand px-5 py-5">
+            <label className="block">
+              <span className="eyebrow text-ink-300">Currency</span>
+              <select
+                value={currency}
+                onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
+                className="mt-2 w-full cursor-pointer appearance-none border border-ink/15 bg-bone px-3 py-2.5 text-[13px] outline-none transition-colors focus:border-ink"
+              >
+                {CURRENCY_LIST.map((item) => (
+                  <option key={item.code} value={item.code} className="text-ink">
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="eyebrow text-ink-300">Shipping location</span>
+              <select
+                value={location}
+                onChange={(event) => chooseLocation(event.target.value)}
+                className="mt-2 w-full cursor-pointer appearance-none border border-ink/15 bg-bone px-3 py-2.5 text-[13px] outline-none transition-colors focus:border-ink"
+              >
+                {LOCATIONS.map((item) => (
+                  <option key={item} value={item} className="text-ink">
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {/* --------------------------------------------------- auth actions */}
+          <div className="border-t border-sand px-5 py-5">
+            {customer ? (
+              <button
+                type="button"
+                onClick={signOut}
+                disabled={busy}
+                className={`w-full border border-ink/20 py-3 text-[11px] font-medium uppercase tracking-[0.2em] transition-colors hover:border-ink ${
+                  busy ? "cursor-wait opacity-60" : ""
+                }`}
+              >
+                {busy ? "Signing out" : "Sign out"}
+              </button>
+            ) : (
+              <div className="flex gap-3">
+                <Link
+                  href="/account/login"
+                  onClick={() => setOpen(false)}
+                  className="flex-1 bg-ink py-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-bone transition-colors hover:bg-ink-700"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/account/login?mode=signup"
+                  onClick={() => setOpen(false)}
+                  className="flex-1 border border-ink/20 py-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-ink transition-colors hover:border-ink"
+                >
+                  Register
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

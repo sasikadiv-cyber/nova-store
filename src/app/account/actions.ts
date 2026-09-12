@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
-import { customers, favourites, paymentMethods, reviews } from "@/db/schema";
+import { customers, favourites, reviews } from "@/db/schema";
 import {
   createCustomerSession,
   destroyCustomerSession,
@@ -131,92 +131,6 @@ export async function changePasswordAction(formData: FormData) {
     .where(eq(customers.id, customer.id));
 
   redirect("/account/profile?saved=password");
-}
-
-/* ---------------------------------------------------------- payment methods */
-
-export async function addPaymentMethodAction(formData: FormData) {
-  const customer = await getCurrentCustomer();
-  if (!customer) redirect("/account/login");
-
-  const digits = text(formData, "cardNumber").replace(/\D/g, "");
-  const last4 = digits.slice(-4);
-  const expMonth = Math.round(Number(text(formData, "expMonth", "1")));
-  const expYear = Math.round(Number(text(formData, "expYear", String(new Date().getFullYear()))));
-
-  if (digits.length < 15 || last4.length !== 4) {
-    redirect("/account/payment?error=Enter+a+valid+card+number");
-  }
-  if (expMonth < 1 || expMonth > 12) {
-    redirect("/account/payment?error=Enter+a+valid+expiry+month");
-  }
-  if (expYear < new Date().getFullYear()) {
-    redirect("/account/payment?error=That+card+has+already+expired");
-  }
-
-  const brand =
-    digits.startsWith("4") ? "Visa"
-    : digits.startsWith("5") ? "Mastercard"
-    : digits.startsWith("3") ? "Amex"
-    : "Card";
-
-  const existing = await db
-    .select({ id: paymentMethods.id })
-    .from(paymentMethods)
-    .where(eq(paymentMethods.customerId, customer.id));
-
-  await db.insert(paymentMethods).values({
-    customerId: customer.id,
-    brand,
-    last4,
-    expMonth,
-    expYear,
-    isDefault: existing.length === 0,
-  });
-
-  revalidatePath("/account/payment");
-  redirect("/account/payment?saved=1");
-}
-
-export async function setDefaultPaymentAction(formData: FormData) {
-  const customer = await getCurrentCustomer();
-  if (!customer) redirect("/account/login");
-
-  const id = Math.round(Number(text(formData, "id", "0")));
-  await db
-    .update(paymentMethods)
-    .set({ isDefault: false })
-    .where(eq(paymentMethods.customerId, customer.id));
-  await db
-    .update(paymentMethods)
-    .set({ isDefault: true })
-    .where(eq(paymentMethods.id, id));
-
-  revalidatePath("/account/payment");
-  redirect("/account/payment?saved=default");
-}
-
-export async function deletePaymentMethodAction(formData: FormData) {
-  const customer = await getCurrentCustomer();
-  if (!customer) redirect("/account/login");
-
-  const id = Math.round(Number(text(formData, "id", "0")));
-  await db.delete(paymentMethods).where(eq(paymentMethods.id, id));
-
-  // keep exactly one default if any card remains
-  const remaining = await db
-    .select()
-    .from(paymentMethods)
-    .where(eq(paymentMethods.customerId, customer.id));
-  if (remaining.length > 0 && !remaining.some((card) => card.isDefault)) {
-    await db
-      .update(paymentMethods)
-      .set({ isDefault: true })
-      .where(eq(paymentMethods.id, remaining[0].id));
-  }
-
-  revalidatePath("/account/payment");
-  redirect("/account/payment?saved=removed");
 }
 
 /* ------------------------------------------------------------------- reviews */

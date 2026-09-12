@@ -43,9 +43,9 @@ const SCHEMA = `-- =============================================================
 --  NOVA — complete storefront setup (schema + demo data)
 --  Paste into the Supabase SQL editor and run. Safe to re-run.
 --
---  Tables: collections, products, customers, payment_methods, reviews,
+--  Tables: collections, products, customers, reviews,
 --          subscribers, discount_codes, orders, order_items, order_events,
---          favourites, product_variants
+--          favourites, product_variants, site_pages, contact_messages
 -- ===========================================================================
 
 -- ------------------------------------------------------------------ schema
@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS products (
   is_featured        boolean NOT NULL DEFAULT FALSE,
   is_new_arrival     boolean NOT NULL DEFAULT FALSE,
   is_best_seller     boolean NOT NULL DEFAULT FALSE,
+  complete_look      jsonb NOT NULL DEFAULT '[]'::jsonb,
   created_at         timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS products_category_idx    ON products (category);
@@ -110,15 +111,56 @@ CREATE TABLE IF NOT EXISTS customers (
   created_at           timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS payment_methods (
-  id          serial PRIMARY KEY,
-  customer_id integer NOT NULL REFERENCES customers (id) ON DELETE CASCADE,
-  brand       text NOT NULL,
-  last4       text NOT NULL,
-  exp_month   integer NOT NULL,
-  exp_year    integer NOT NULL,
-  is_default  boolean NOT NULL DEFAULT FALSE,
-  created_at  timestamptz NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS currency_rules (
+  code            text PRIMARY KEY,
+  fx_rate         real NOT NULL DEFAULT 1,
+  markup_percent  real NOT NULL DEFAULT 0,
+  rounding        text NOT NULL DEFAULT 'none',
+  active          boolean NOT NULL DEFAULT TRUE,
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS gift_cards (
+  id             serial PRIMARY KEY,
+  code           text NOT NULL UNIQUE,
+  initial_cents  integer NOT NULL,
+  balance_cents  integer NOT NULL,
+  note           text NOT NULL DEFAULT '',
+  active         boolean NOT NULL DEFAULT TRUE,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id             serial PRIMARY KEY,
+  email          text NOT NULL UNIQUE,
+  password_hash  text NOT NULL,
+  name           text NOT NULL DEFAULT '',
+  role           text NOT NULL DEFAULT 'stock_manager',
+  active         boolean NOT NULL DEFAULT TRUE,
+  last_login_at  timestamptz,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS site_pages (
+  slug        text PRIMARY KEY,
+  title       text NOT NULL,
+  eyebrow     text NOT NULL DEFAULT '',
+  intro       text NOT NULL DEFAULT '',
+  blocks      jsonb NOT NULL DEFAULT '[]'::jsonb,
+  published   boolean NOT NULL DEFAULT TRUE,
+  sort_order  integer NOT NULL DEFAULT 0,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS contact_messages (
+  id         serial PRIMARY KEY,
+  name       text NOT NULL,
+  email      text NOT NULL,
+  subject    text NOT NULL DEFAULT '',
+  message    text NOT NULL,
+  handled    boolean NOT NULL DEFAULT FALSE,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS reviews (
@@ -267,7 +309,7 @@ out.push(
       "is_best_seller", "created_at",
     ],
     values(products.rows, (r) =>
-      `(${num(r, "id")}, ${lit(r.slug)}, ${lit(r.name)}, ${lit(r.subtitle)}, ${lit(r.description)}, ${lit(r.story)}, ${lit(r.category)}, ${lit(r.gender)}, ${lit(r.collection_slug)}, ${num(r, "price_cents")}, ${num(r, "compare_at_cents")}, ${lit(r.colors)}, ${lit(r.sizes)}, ${lit(r.size_type)}, ${lit(r.images)}, ${lit(r.image_labels)}, ${lit(r.story_images)}, ${lit(r.story_image_labels)}, ${lit(r.details)}, ${lit(r.materials)}, ${lit(r.care)}, ${num(r, "rating")}, ${num(r, "review_count")}, ${num(r, "stock")}, ${lit(r.badge)}, ${bool(r, "is_featured")}, ${bool(r, "is_new_arrival")}, ${bool(r, "is_best_seller")}, ${lit(r.created_at)})`,
+      `(${num(r, "id")}, ${lit(r.slug)}, ${lit(r.name)}, ${lit(r.subtitle)}, ${lit(r.description)}, ${lit(r.story)}, ${lit(r.category)}, ${lit(r.gender)}, ${lit(r.collection_slug)}, ${num(r, "price_cents")}, ${num(r, "compare_at_cents")}, ${lit(r.colors)}, ${lit(r.sizes)}, ${lit(r.size_type)}, ${lit(r.images)}, ${lit(r.image_labels)}, ${lit(r.story_images)}, ${lit(r.story_image_labels)}, ${lit(r.details)}, ${lit(r.materials)}, ${lit(r.care)}, ${num(r, "rating")}, ${num(r, "review_count")}, ${num(r, "stock")}, ${lit(r.badge)}, ${bool(r, "is_featured")}, ${bool(r, "is_new_arrival")}, ${bool(r, "is_best_seller")}, ${lit(r.complete_look)}, ${lit(r.created_at)})`,
     ),
   ),
 );
@@ -280,18 +322,6 @@ out.push(
     ["id", "email", "password_hash", "full_name", "phone", "default_address1", "default_address2", "default_city", "default_region", "default_postal_code", "default_country", "created_at"],
     values(customers.rows, (r) =>
       `(${num(r, "id")}, ${lit(r.email)}, ${lit(r.password_hash)}, ${lit(r.full_name)}, ${lit(r.phone)}, ${lit(r.default_address1)}, ${lit(r.default_address2)}, ${lit(r.default_city)}, ${lit(r.default_region)}, ${lit(r.default_postal_code)}, ${lit(r.default_country)}, ${lit(r.created_at)})`,
-    ),
-  ),
-);
-
-/* payment_methods */
-const cards = await client.query("SELECT * FROM payment_methods ORDER BY id");
-out.push(
-  insert(
-    "payment_methods",
-    ["id", "customer_id", "brand", "last4", "exp_month", "exp_year", "is_default", "created_at"],
-    values(cards.rows, (r) =>
-      `(${num(r, "id")}, ${num(r, "customer_id")}, ${lit(r.brand)}, ${lit(r.last4)}, ${num(r, "exp_month")}, ${num(r, "exp_year")}, ${bool(r, "is_default")}, ${lit(r.created_at)})`,
     ),
   ),
 );
@@ -380,6 +410,68 @@ out.push(
     : "-- favourites: no rows",
 );
 
+/* currency_rules */
+const rules = await client.query("SELECT * FROM currency_rules ORDER BY code");
+out.push(
+  insert(
+    "currency_rules",
+    ["code", "fx_rate", "markup_percent", "rounding", "active", "updated_at"],
+    values(rules.rows, (r) =>
+      `(${lit(r.code)}, ${num(r, "fx_rate")}, ${num(r, "markup_percent")}, ${lit(r.rounding)}, ${bool(r, "active")}, ${lit(r.updated_at)})`,
+    ),
+  ),
+);
+
+/* gift_cards */
+const cards = await client.query("SELECT * FROM gift_cards ORDER BY id");
+out.push(
+  insert(
+    "gift_cards",
+    ["id", "code", "initial_cents", "balance_cents", "note", "active", "created_at", "updated_at"],
+    values(cards.rows, (r) =>
+      `(${num(r, "id")}, ${lit(r.code)}, ${num(r, "initial_cents")}, ${num(r, "balance_cents")}, ${lit(r.note)}, ${bool(r, "active")}, ${lit(r.created_at)}, ${lit(r.updated_at)})`,
+    ),
+  ),
+);
+
+/* admin_users — password hashes are deliberately excluded from the dump */
+const admins = await client.query(
+  "SELECT id, email, name, role, active, last_login_at, created_at FROM admin_users ORDER BY id",
+);
+out.push(
+  insert(
+    "admin_users",
+    ["id", "email", "name", "role", "active", "last_login_at", "created_at"],
+    values(admins.rows, (r) =>
+      `(${num(r, "id")}, ${lit(r.email)}, ${lit(r.name)}, ${lit(r.role)}, ${bool(r, "active")}, ${lit(r.last_login_at)}, ${lit(r.created_at)})`,
+    ),
+  ),
+);
+
+/* site_pages */
+const pages = await client.query("SELECT * FROM site_pages ORDER BY sort_order");
+out.push(
+  insert(
+    "site_pages",
+    ["slug", "title", "eyebrow", "intro", "blocks", "published", "sort_order", "updated_at"],
+    values(pages.rows, (r) =>
+      `(${lit(r.slug)}, ${lit(r.title)}, ${lit(r.eyebrow)}, ${lit(r.intro)}, ${lit(r.blocks)}, ${bool(r, "published")}, ${num(r, "sort_order")}, ${lit(r.updated_at)})`,
+    ),
+  ),
+);
+
+/* contact_messages */
+const messages = await client.query("SELECT * FROM contact_messages ORDER BY id");
+out.push(
+  insert(
+    "contact_messages",
+    ["id", "name", "email", "subject", "message", "handled", "created_at"],
+    values(messages.rows, (r) =>
+      `(${num(r, "id")}, ${lit(r.name)}, ${lit(r.email)}, ${lit(r.subject)}, ${lit(r.message)}, ${bool(r, "handled")}, ${lit(r.created_at)})`,
+    ),
+  ),
+);
+
 /* product_variants */
 const variants = await client.query("SELECT * FROM product_variants ORDER BY id");
 out.push(
@@ -395,9 +487,9 @@ out.push(
 /* ----------------------------------------------- keep sequences in step */
 
 const SEQUENCED = [
-  "collections", "products", "customers", "payment_methods", "reviews",
+  "collections", "products", "customers", "reviews",
   "subscribers", "discount_codes", "orders", "order_items", "order_events",
-  "favourites", "product_variants",
+  "favourites", "product_variants", "contact_messages", "gift_cards", "admin_users",
 ];
 
 out.push("\n-- ------------------------------------------------- resync sequences");
@@ -417,7 +509,6 @@ out.push(`
 ALTER TABLE collections      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customers        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payment_methods  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscribers      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE discount_codes   ENABLE ROW LEVEL SECURITY;
@@ -427,6 +518,11 @@ ALTER TABLE order_events      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE favourites        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE site_settings     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE product_variants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE site_pages       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contact_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE currency_rules   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gift_cards       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_users      ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------------------------------- done
 -- Demo accounts

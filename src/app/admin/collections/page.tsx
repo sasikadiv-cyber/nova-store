@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { collections, products } from "@/db/schema";
 import { saveCollectionAction } from "../actions";
 import { SubmitButton } from "@/components/admin/submit-button";
+import { requireManagerPage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function AdminCollections({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireManagerPage();
   const params = await searchParams;
 
   const rows = await db

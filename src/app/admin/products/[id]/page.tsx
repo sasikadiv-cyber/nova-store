@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { collections, products } from "@/db/schema";
 import { ProductForm } from "@/components/admin/product-form";
 import { formatUsd } from "@/lib/currency";
+import { requireManagerPage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function EditProductPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireManagerPage();
   const { id } = await params;
   const productId = Number(id);
   if (!Number.isFinite(productId)) return null;

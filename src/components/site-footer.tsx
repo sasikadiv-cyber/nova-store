@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CookiePreferencesLink } from "./cookie-preferences-link";
 import { NewsletterForm } from "./newsletter-form";
 
 const COLUMNS = [
@@ -26,22 +27,23 @@ const COLUMNS = [
   {
     title: "Client Care",
     links: [
+      { label: "Help Centre", href: "/help" },
       { label: "My Account", href: "/account" },
       { label: "Track an Order", href: "/account/orders" },
-      { label: "Global Shipping", href: "/shop" },
-      { label: "Returns & Exchanges", href: "/shop" },
-      { label: "Size Guide", href: "/shop" },
-      { label: "Product Care", href: "/shop" },
-      { label: "Contact Us", href: "/shop" },
+      { label: "Global Shipping", href: "/shipping" },
+      { label: "Returns & Exchanges", href: "/returns" },
+      { label: "Size Guide", href: "/size-guide" },
+      { label: "Product Care", href: "/product-care" },
+      { label: "Contact Us", href: "/contact" },
     ],
   },
   {
     title: "The House",
     links: [
-      { label: "Our Materials", href: "/shop" },
-      { label: "Responsibility", href: "/shop" },
-      { label: "Ateliers & Mills", href: "/shop" },
-      { label: "Careers", href: "/shop" },
+      { label: "Our Materials", href: "/materials" },
+      { label: "Responsibility", href: "/responsibility" },
+      { label: "Ateliers & Mills", href: "/ateliers" },
+      { label: "Careers", href: "/careers" },
     ],
   },
 ];
@@ -86,9 +88,19 @@ export function SiteFooter() {
         <div className="mt-16 flex flex-col gap-6 border-t border-ivory/12 pt-7 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-[11.5px] text-ivory/50">
             <span>© {new Date().getFullYear()} Nova Global Commerce</span>
-            <span>Privacy</span>
-            <span>Terms</span>
-            <span>Accessibility</span>
+            <Link href="/privacy" className="link-underline transition-colors hover:text-ivory">
+              Privacy
+            </Link>
+            <Link href="/terms" className="link-underline transition-colors hover:text-ivory">
+              Terms
+            </Link>
+            <Link
+              href="/accessibility"
+              className="link-underline transition-colors hover:text-ivory"
+            >
+              Accessibility
+            </Link>
+            <CookiePreferencesLink />
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">

@@ -5,7 +5,6 @@ import {
   orderEvents,
   orderItems,
   orders,
-  paymentMethods,
   products,
   reviews,
   customers,
@@ -13,7 +12,6 @@ import {
   type Order,
   type OrderEvent,
   type OrderItem,
-  type PaymentMethod,
   type Review,
 } from "@/db/schema";
 import { hashPassword } from "./customer-auth";
@@ -108,14 +106,6 @@ export async function getCustomerReviews(customerId: number) {
     .orderBy(desc(reviews.createdAt));
 }
 
-export async function getPaymentMethods(customerId: number): Promise<PaymentMethod[]> {
-  return db
-    .select()
-    .from(paymentMethods)
-    .where(eq(paymentMethods.customerId, customerId))
-    .orderBy(desc(paymentMethods.isDefault), desc(paymentMethods.createdAt));
-}
-
 export async function getCustomerStats(customerId: number) {
   const [row] = await db
     .select({
@@ -176,11 +166,6 @@ export async function ensureDemoCustomer() {
             defaultCountry: "France",
           })
           .returning();
-
-        await db.insert(paymentMethods).values([
-          { customerId: customer.id, brand: "Visa", last4: "4242", expMonth: 8, expYear: 2029, isDefault: true },
-          { customerId: customer.id, brand: "Amex", last4: "0057", expMonth: 3, expYear: 2028 },
-        ]);
 
         const catalogue = await db
           .select()

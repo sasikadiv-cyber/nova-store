@@ -11,6 +11,7 @@ import {
   type Product,
 } from "@/db/schema";
 import { evaluateDiscount, recordRedemption } from "./discounts";
+import { evaluateGiftCard, redeemGiftCard } from "./gift-cards";
 import { decrementStock } from "./variants";
 import { seedDatabase } from "./seed";
 
@@ -161,6 +162,18 @@ export async function getProductReviews(productId: number) {
     .from(reviews)
     .where(eq(reviews.productId, productId))
     .orderBy(desc(reviews.createdAt));
+}
+
+/** The pieces the owner styled together as "Complete the look". */
+export async function getCompleteLook(slugs: string[]) {
+  if (slugs.length === 0) return [];
+  try {
+    const rows = await db.select().from(products).where(inArray(products.slug, slugs));
+    const bySlug = new Map(rows.map((row) => [row.slug, row]));
+    return slugs.map((slug) => bySlug.get(slug)).filter((row): row is Product => Boolean(row));
+  } catch {
+    return [];
+  }
 }
 
 export async function getRelatedProducts(product: Product, limit = 4) {
@@ -431,6 +444,7 @@ export async function createOrder(input: OrderInput) {
   let discountCode = "";
   let codeId: number | null = null;
   let discountSummary = "";
+  let giftCardId: number | null = null;
 
   if (input.discountCode) {
     const evaluation = await evaluateDiscount(
@@ -442,6 +456,15 @@ export async function createOrder(input: OrderInput) {
       discountCode = evaluation.codeText;
       codeId = evaluation.code.id;
       discountSummary = evaluation.summary;
+    } else {
+      /* Not a promo code — try it as a gift card and spend from its balance. */
+      const card = await evaluateGiftCard(input.discountCode, subtotalCents);
+      if (card.ok) {
+        discountCents = card.maxRedeemCents;
+        discountCode = card.code;
+        discountSummary = card.summary;
+        giftCardId = card.giftCardId;
+      }
     }
   }
 
@@ -500,6 +523,10 @@ export async function createOrder(input: OrderInput) {
 
   if (codeId) {
     await recordRedemption(codeId);
+  }
+
+  if (giftCardId) {
+    await redeemGiftCard(giftCardId, discountCents);
   }
 
   return {

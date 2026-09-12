@@ -21,11 +21,15 @@ const PRICE_PRESETS = [
 ];
 
 function Swatch({ hex }: { hex: string }) {
+  /* The 20px wrapper gives the offset ring room to draw, so the circle is
+     never clipped by the scroll container on its left edge. */
   return (
-    <span
-      className="h-3.5 w-3.5 rounded-full ring-1 ring-ink/20 ring-offset-2 ring-offset-bone"
-      style={{ backgroundColor: hex }}
-    />
+    <span className="grid h-5 w-5 shrink-0 place-items-center">
+      <span
+        className="h-3.5 w-3.5 rounded-full ring-1 ring-ink/20 ring-offset-2 ring-offset-bone"
+        style={{ backgroundColor: hex }}
+      />
+    </span>
   );
 }
 
@@ -44,8 +48,29 @@ export function ShopControls({ facets, state }: Props) {
   const pathname = usePathname();
   const [draft, setDraft] = useState<FilterState>(state);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
   useEffect(() => setDraft(state), [state]);
+
+  /* Whether the shopper keeps the desktop rail open is remembered, so the
+     shop feels the same the next time they visit. */
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("nova.filters.open") === "0") setFiltersOpen(false);
+    } catch {
+      /* storage unavailable — keep the rail open */
+    }
+  }, []);
+
+  const toggleFilters = () =>
+    setFiltersOpen((open) => {
+      try {
+        window.localStorage.setItem("nova.filters.open", open ? "0" : "1");
+      } catch {
+        /* ignore */
+      }
+      return !open;
+    });
 
   const apply = (next: FilterState) => {
     setDraft(next);
@@ -60,6 +85,21 @@ export function ShopControls({ facets, state }: Props) {
       : [...current, value];
     apply({ ...draft, [key]: next });
   };
+
+  /* Puts the panel back the way the shop opened — filters, price and sort. */
+  const resetPanel = () =>
+    apply({
+      categories: [],
+      genders: [],
+      sizes: [],
+      families: [],
+      collection: null,
+      search: null,
+      min: null,
+      max: null,
+      onSale: false,
+      sort: "featured",
+    });
 
   const clearAll = () =>
     apply({
@@ -141,8 +181,8 @@ export function ShopControls({ facets, state }: Props) {
                   <span className={active ? "text-ink" : "text-ink-500"}>{family.name}</span>
                 </span>
                 <span
-                  className={`h-[14px] w-[14px] border transition-colors ${
-                    active ? "border-ink bg-ink" : "border-ink/25"
+                  className={`grid h-[14px] w-[14px] shrink-0 place-items-center border transition-colors ${
+                    active ? "border-ink bg-ink text-bone" : "border-ink/25"
                   }`}
                 >
                   {active && (
@@ -195,6 +235,27 @@ export function ShopControls({ facets, state }: Props) {
 
         <label className="mt-6 block">
           <span className="flex items-center justify-between text-[12px] text-ink-300">
+            <span>Min price</span>
+            <span className="text-ink">
+              {formatUsd((draft.min ?? facets.priceMin) * 100)}
+            </span>
+          </span>
+          <input
+            type="range"
+            min={facets.priceMin}
+            max={facets.priceMax}
+            step={10}
+            value={draft.min ?? facets.priceMin}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              apply({ ...draft, min: value <= facets.priceMin ? null : value });
+            }}
+            className="mt-3 w-full accent-ink"
+          />
+        </label>
+
+        <label className="mt-6 block">
+          <span className="flex items-center justify-between text-[12px] text-ink-300">
             <span>Max price</span>
             <span className="text-ink">
               {formatUsd((draft.max ?? facets.priceMax) * 100)}
@@ -206,7 +267,10 @@ export function ShopControls({ facets, state }: Props) {
             max={facets.priceMax}
             step={10}
             value={draft.max ?? facets.priceMax}
-            onChange={(event) => apply({ ...draft, max: Number(event.target.value) })}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              apply({ ...draft, max: value >= facets.priceMax ? null : value });
+            }}
             className="mt-3 w-full accent-ink"
           />
         </label>
@@ -220,30 +284,64 @@ export function ShopControls({ facets, state }: Props) {
         />
       </Group>
 
-      {activeCount > 0 && (
+      <div className="flex flex-wrap items-center gap-5">
+        {activeCount > 0 && (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="self-start border-b border-ink pb-1 text-[11.5px] uppercase tracking-[0.16em]"
+          >
+            Clear all filters
+          </button>
+        )}
         <button
           type="button"
-          onClick={clearAll}
-          className="self-start border-b border-ink pb-1 text-[11.5px] uppercase tracking-[0.16em]"
+          onClick={resetPanel}
+          className="self-start border-b border-ink-300 pb-1 text-[11.5px] uppercase tracking-[0.16em] text-ink-300 transition-colors hover:border-ink hover:text-ink"
         >
-          Clear all filters
+          Reset panel
         </button>
-      )}
+      </div>
     </div>
   );
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden w-[188px] shrink-0 lg:block xl:w-[210px]">
-        <div className="hide-scrollbar sticky top-[92px] flex max-h-[calc(100vh-120px)] flex-col overflow-y-auto">
-          <div className="mb-6 flex items-baseline justify-between border-b border-ink/12 pb-4">
-            <p className="eyebrow text-ink-300">Refine</p>
-            {activeCount > 0 && <span className="text-[11.5px] text-ink-300">{activeCount} active</span>}
+      {/* Desktop rail — collapsible, exactly like the mobile sheet */}
+      {filtersOpen ? (
+        <aside className="hidden w-[188px] shrink-0 lg:block xl:w-[210px]">
+          <div className="hide-scrollbar sticky top-[92px] flex max-h-[calc(100vh-120px)] flex-col overflow-y-auto">
+            <div className="mb-6 flex items-baseline justify-between gap-3 border-b border-ink/12 pb-4">
+              <p className="eyebrow text-ink-300">Refine</p>
+              <span className="flex items-center gap-3">
+                {activeCount > 0 && (
+                  <span className="text-[11.5px] text-ink-300">{activeCount} active</span>
+                )}
+                <button
+                  type="button"
+                  onClick={toggleFilters}
+                  className="link-underline text-[11px] uppercase tracking-[0.14em] text-ink-300 transition-colors hover:text-ink"
+                >
+                  Hide
+                </button>
+              </span>
+            </div>
+            {Panel}
           </div>
-          {Panel}
-        </div>
-      </aside>
+        </aside>
+      ) : (
+        <button
+          type="button"
+          onClick={toggleFilters}
+          className="hidden items-center gap-2 self-start border border-ink/20 px-4 py-2.5 text-[11.5px] uppercase tracking-[0.16em] transition-colors hover:border-ink lg:flex"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.6" fill="none">
+            <path d="M4 7h16M7 12h10M10 17h4" />
+          </svg>
+          Filters
+          {activeCount > 0 && <span className="text-brass">({activeCount})</span>}
+        </button>
+      )}
 
       {/* Mobile trigger */}
       <button
@@ -325,7 +423,7 @@ function Check({
     <button type="button" onClick={onChange} className="group flex w-full items-center gap-3 py-1.5 text-left">
       <span
         className={`grid h-[15px] w-[15px] shrink-0 place-items-center border transition-colors ${
-          checked ? "border-ink bg-ink" : "border-ink/25 group-hover:border-ink/60"
+          checked ? "border-ink bg-ink text-bone" : "border-ink/25 group-hover:border-ink/60"
         }`}
       >
         {checked && (

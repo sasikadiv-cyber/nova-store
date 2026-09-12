@@ -11,6 +11,7 @@ import {
   deleteProductAction,
   toggleFlagAction,
 } from "../actions";
+import { requireManagerPage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function AdminProducts({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireManagerPage();
   const params = await searchParams;
   const search = typeof params.q === "string" ? params.q.trim() : "";
   const category = typeof params.category === "string" ? params.category : "";

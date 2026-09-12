@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { Collection, Product } from "@/db/schema";
 import { ImageEditor } from "./image-editor";
+import { VariantStockEditor } from "./variant-stock-editor";
 import { ColourEditor, SizeEditor } from "./variant-editor";
 
 const CATEGORIES = ["Outerwear", "Knitwear", "Footwear", "Dresses", "Tailoring", "Essentials"];
@@ -23,11 +24,14 @@ const label = "eyebrow block text-ink-300";
 export function ProductForm({
   product,
   collections,
+  variantStocks,
 }: {
   product?: Product;
   collections: Collection[];
+  variantStocks?: { color: string; size: string; stock: number }[];
 }) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,9 +72,11 @@ export function ProductForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="relative mt-8 grid gap-8 lg:grid-cols-[1.6fr_1fr]">
+    <form ref={formRef} onSubmit={onSubmit} className="relative mt-8 grid gap-8 lg:grid-cols-[1.6fr_1fr]">
       {product ? <input type="hidden" name="id" value={product.id} /> : null}
 
+      {/* ------------------------------------ left column (never widened by content) */}
+      <div className="min-w-0 space-y-8">
       <div className="space-y-6 border border-sand bg-linen p-6">
         <h2 className="text-xl">The piece</h2>
 
@@ -203,7 +209,30 @@ export function ProductForm({
         </div>
       </div>
 
-      <div className="space-y-6">
+      {/* ------------------------------------------- stock by colour & size */}
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="text-xl">Stock by colour &amp; size</h2>
+          <p className="text-[11.5px] uppercase tracking-[0.14em] text-ink-300">
+            Same card as stock management
+          </p>
+        </div>
+        <VariantStockEditor
+          formRef={formRef}
+          productName={product?.name}
+          productCategory={product?.category}
+          productImage={product?.images?.[0]}
+          productSlug={product?.slug}
+          initialColors={(product?.colors ?? []).map((entry) => entry.name)}
+          initialSizes={product?.sizes ?? ["S", "M", "L"]}
+          initialStocks={variantStocks}
+          productColors={product?.colors ?? []}
+          startInEdit={!product}
+        />
+      </div>
+      </div>
+
+      <div className="min-w-0 space-y-6">
         <div className="space-y-6 border border-sand bg-linen p-6">
           <h2 className="text-xl">Pricing &amp; stock</h2>
 
@@ -237,18 +266,37 @@ export function ProductForm({
           </div>
 
           <label className="block">
-            <span className={label}>Stock on hand</span>
+            <span className={label}>Stock on hand (auto)</span>
             <input
               name="stock"
               type="number"
               min={0}
-              defaultValue={product?.stock ?? 40}
-              className={field}
+              defaultValue={product?.stock ?? 0}
+              className={`${field} bg-bone-dark text-ink-300`}
+              readOnly
             />
+            <span className="mt-2 block text-[11.5px] text-ink-300">
+              Filled in from the colour × size counts below.
+            </span>
           </label>
         </div>
 
         <div className="space-y-6 border border-sand bg-linen p-6">
+          <h2 className="text-xl">Complete the look</h2>
+          <label className="block">
+            <span className="eyebrow text-ink-300">Product slugs — one per line</span>
+            <textarea
+              name="completeLook"
+              rows={4}
+              defaultValue={(product?.completeLook ?? []).join("\n")}
+              className={field}
+              placeholder={"meridian-cotton-trench\natelier-loafer"}
+            />
+            <span className="mt-2 block text-[12px] text-ink-300">
+              The pieces shown with this one on its product page, styled as a set.
+            </span>
+          </label>
+
           <h2 className="text-xl">Story images</h2>
           <p className="text-[12px] leading-relaxed text-ink-300">
             These appear in the large <span className="text-ink">&ldquo;The making of it&rdquo;</span>{" "}

@@ -229,7 +229,6 @@ function AppearanceField({
           <div className="relative h-[104px] w-[150px] shrink-0 overflow-hidden bg-ink">
             {definition.kind === "video" ? (
               value.trim() ? (
-                // eslint-disable-next-line jsx-a11y/media-has-caption
                 <video
                   key={value}
                   src={value}

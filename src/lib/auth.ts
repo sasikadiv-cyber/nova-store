@@ -1,16 +1,22 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
+import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
+import { notFound, redirect } from "next/navigation";
+
+import { db } from "@/db";
+import { adminUsers } from "@/db/schema";
 
 /**
- * Shop-owner authentication.
+ * Console authentication with two roles.
  *
- * Credentials come from the environment so the storefront owner can rotate
- * them without a code change:
- *   ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_SECRET
+ *   owner         — the store owner, credentials from the environment
+ *                   (ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_SECRET). Full access.
+ *   stock_manager — a team member the owner creates in the console. Access to
+ *                   the catalogue, stock, orders, reviews and messages only.
  *
- * The session is a signed, httpOnly cookie — the signature stops anyone from
- * forging a token, and the expiry stops stale sessions.
+ * The session is a signed, httpOnly cookie carrying the role, so a demoted or
+ * removed manager loses access the moment their row is deactivated.
  */
 
 const COOKIE_NAME = "nova_admin";
@@ -22,17 +28,82 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "nova-atelier-signing-key-2026"
 
 export const OWNER_EMAIL = ADMIN_EMAIL;
 
+export type AdminRole = "owner" | "stock_manager" | "support";
+
+/** Roles that may write to the catalogue. */
+const MANAGER_ROLES: AdminRole[] = ["owner", "stock_manager"];
+
+function normaliseRole(value: string): AdminRole {
+  if (value === "support") return "support";
+  return "stock_manager";
+}
+
+export type AdminUser = {
+  id: number;
+  email: string;
+  name: string;
+  role: AdminRole;
+};
+
 function sign(payload: string) {
   return createHmac("sha256", ADMIN_SECRET).update(payload).digest("base64url");
 }
 
-export function verifyCredentials(email: string, password: string) {
-  return email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD;
+/* --------------------------------------------------------------- passwords */
+
+export function hashAdminPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
 }
 
-export async function createAdminSession() {
+export function verifyAdminPassword(password: string, stored: string) {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) return false;
+  const candidate = scryptSync(password, salt, 64);
+  const expected = Buffer.from(hash, "hex");
+  if (candidate.length !== expected.length) return false;
+  return timingSafeEqual(candidate, expected);
+}
+
+/* ------------------------------------------------------------- credentials */
+
+/** Checks the owner (environment) first, then the team table. */
+export async function verifyCredentials(email: string, password: string): Promise<AdminUser | null> {
+  const normalised = email.trim().toLowerCase();
+
+  if (normalised === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
+    return { id: 0, email: ADMIN_EMAIL, name: "Store owner", role: "owner" };
+  }
+
+  const [row] = await db
+    .select()
+    .from(adminUsers)
+    .where(eq(adminUsers.email, normalised))
+    .limit(1);
+
+  if (!row || !row.active) return null;
+  if (!verifyAdminPassword(password, row.passwordHash)) return null;
+
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name || row.email,
+    role: normaliseRole(row.role),
+  };
+}
+
+/* ----------------------------------------------------------------- session */
+
+export async function createAdminSession(user: AdminUser) {
   const payload = Buffer.from(
-    JSON.stringify({ sub: ADMIN_EMAIL, exp: Date.now() + MAX_AGE_SECONDS * 1000 }),
+    JSON.stringify({
+      sub: user.email,
+      uid: user.id,
+      role: user.role,
+      name: user.name,
+      exp: Date.now() + MAX_AGE_SECONDS * 1000,
+    }),
   ).toString("base64url");
 
   const store = await cookies();
@@ -50,30 +121,86 @@ export async function destroyAdminSession() {
   store.delete(COOKIE_NAME);
 }
 
-export async function isAdmin() {
+/** The signed-in console user, with their role — or null. */
+export async function getCurrentAdmin(): Promise<AdminUser | null> {
   const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
-  if (!token || !token.includes(".")) return false;
+  const raw = store.get(COOKIE_NAME)?.value;
+  if (!raw) return null;
 
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return false;
+  const [payload, signature] = raw.split(".");
+  if (!payload || !signature) return null;
 
   const expected = sign(payload);
-  const a = Buffer.from(expected);
-  const b = Buffer.from(signature);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
+  const given = Buffer.from(signature);
+  const wanted = Buffer.from(expected);
+  if (given.length !== wanted.length || !timingSafeEqual(given, wanted)) return null;
 
+  let data: { sub?: string; uid?: number; role?: string; name?: string; exp?: number };
   try {
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString()) as { exp?: number };
-    return typeof data.exp === "number" && data.exp > Date.now();
+    data = JSON.parse(Buffer.from(payload, "base64url").toString());
   } catch {
-    return false;
+    return null;
   }
+  if (!data?.exp || Date.now() > data.exp) return null;
+
+  /* The owner never lives in the table, so the signature alone is enough. */
+  if (data.role === "owner" && data.sub?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+    return { id: 0, email: ADMIN_EMAIL, name: data.name || "Store owner", role: "owner" };
+  }
+
+  /* Team members are re-checked on every request, so deactivating a manager
+     takes effect immediately. */
+  if (typeof data.uid === "number" && data.uid > 0) {
+    const [row] = await db.select().from(adminUsers).where(eq(adminUsers.id, data.uid)).limit(1);
+    if (row && row.active) {
+      return {
+        id: row.id,
+        email: row.email,
+        name: row.name || row.email,
+        role: normaliseRole(row.role),
+      };
+    }
+  }
+
+  return null;
 }
 
-/** Guard for every server action — throws before any write happens. */
+export async function isAdmin() {
+  return (await getCurrentAdmin()) !== null;
+}
+
+/** Any console user. */
 export async function requireAdmin() {
-  if (!(await isAdmin())) {
-    throw new Error("Unauthorized: shop owner access only.");
+  const admin = await getCurrentAdmin();
+  if (!admin) redirect("/admin");
+  return admin;
+}
+
+/** Only the store owner — for appearance, pages, pricing and team settings. */
+export async function requireOwner() {
+  const admin = await getCurrentAdmin();
+  if (!admin || admin.role !== "owner") redirect("/admin");
+  return admin;
+}
+
+/** Owner or stock manager — anyone who may write to the catalogue. Support
+ *  team members can read the console but cannot change products or stock. */
+export async function requireManager() {
+  const admin = await getCurrentAdmin();
+  if (!admin || !MANAGER_ROLES.includes(admin.role)) redirect("/admin");
+  return admin;
+}
+
+/** Page-level guard with the same rule as requireManager. */
+export async function requireManagerPage() {
+  const admin = await getCurrentAdmin();
+  if (!admin || !MANAGER_ROLES.includes(admin.role)) notFound();
+  return admin;
+}
+
+/** Records a team member's sign-in for the profile and team pages. */
+export async function recordAdminLogin(userId: number) {
+  if (userId > 0) {
+    await db.update(adminUsers).set({ lastLoginAt: new Date() }).where(eq(adminUsers.id, userId));
   }
 }

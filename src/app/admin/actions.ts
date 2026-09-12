@@ -7,20 +7,31 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import {
   collections,
+  contactMessages,
+  currencyRules,
   discountCodes,
+  giftCards,
   orderEvents,
   orderItems,
   orders,
   products,
   reviews,
+  sitePages,
   type ColorOption,
+  adminUsers,
 } from "@/db/schema";
 import {
   createAdminSession,
   destroyAdminSession,
+  hashAdminPassword,
+  recordAdminLogin,
   requireAdmin,
+  requireManager,
+  requireOwner,
+  verifyAdminPassword,
   verifyCredentials,
 } from "@/lib/auth";
+import { generateGiftCardCode } from "@/lib/gift-cards";
 import { slugify } from "@/lib/product-form";
 import { ORDER_FLOW } from "@/lib/customer-queries";
 
@@ -62,15 +73,26 @@ function refreshStore() {
 
 /* --------------------------------------------------------------------- auth */
 
-export async function loginAction(formData: FormData) {
+export type AdminLoginState = { error: string | null };
+
+/**
+ * Returns the failure on the form instead of redirecting, so the console can
+ * tell the owner exactly what went wrong (bad email, bad password).
+ */
+export async function loginAction(
+  _prev: AdminLoginState,
+  formData: FormData,
+): Promise<AdminLoginState> {
   const email = text(formData, "email");
   const password = text(formData, "password");
 
-  if (!verifyCredentials(email, password)) {
-    redirect("/admin?error=1");
+  const admin = await verifyCredentials(email, password);
+  if (!admin) {
+    return { error: "Incorrect email or password. Please check both and try again." };
   }
 
-  await createAdminSession();
+  await recordAdminLogin(admin.id);
+  await createAdminSession(admin);
   redirect("/admin");
 }
 
@@ -82,7 +104,7 @@ export async function logoutAction() {
 /* ----------------------------------------------------------------- products */
 
 export async function deleteProductAction(formData: FormData) {
-  await requireAdmin();
+  await requireManager();
   const id = numeric(formData, "id", 0);
   if (id > 0) {
     await db.delete(products).where(eq(products.id, id));
@@ -92,7 +114,7 @@ export async function deleteProductAction(formData: FormData) {
 }
 
 export async function updateStockAction(formData: FormData) {
-  await requireAdmin();
+  await requireManager();
   const id = numeric(formData, "id", 0);
   const stock = Math.max(0, Math.round(numeric(formData, "stock", 0)));
   if (id > 0) {
@@ -130,7 +152,7 @@ export async function toggleFlagAction(formData: FormData) {
  *  mode = restore  → roll back to the compare-at price
  */
 export async function applyDiscountAction(formData: FormData) {
-  await requireAdmin();
+  await requireManager();
   const mode = text(formData, "mode", "apply");
   const category = text(formData, "category");
   const scope = category ? eq(products.category, category) : undefined;
@@ -182,7 +204,7 @@ export async function applyDiscountAction(formData: FormData) {
 /* -------------------------------------------------------------- collections */
 
 export async function saveCollectionAction(formData: FormData) {
-  await requireAdmin();
+  await requireManager();
 
   const id = numeric(formData, "id", 0);
   const name = text(formData, "name") || "New collection";
@@ -299,7 +321,7 @@ function randomCode() {
 }
 
 export async function saveDiscountAction(formData: FormData) {
-  await requireAdmin();
+  await requireManager();
 
   const id = numeric(formData, "id", 0);
   const rawCode = text(formData, "code").toUpperCase();
@@ -341,7 +363,7 @@ export async function saveDiscountAction(formData: FormData) {
 }
 
 export async function toggleDiscountAction(formData: FormData) {
-  await requireAdmin();
+  await requireManager();
   const id = numeric(formData, "id", 0);
   if (id > 0) {
     await db
@@ -354,11 +376,417 @@ export async function toggleDiscountAction(formData: FormData) {
 }
 
 export async function deleteDiscountAction(formData: FormData) {
-  await requireAdmin();
+  await requireManager();
   const id = numeric(formData, "id", 0);
   if (id > 0) {
     await db.delete(discountCodes).where(eq(discountCodes.id, id));
   }
   revalidatePath("/admin/discounts");
   redirect("/admin/discounts?deleted=1");
+}
+
+/* ------------------------------------------------------- editable site pages */
+
+export async function saveSitePageAction(formData: FormData) {
+  await requireOwner();
+
+  const slug = text(formData, "slug");
+  const title = text(formData, "title");
+  const eyebrow = text(formData, "eyebrow");
+  const intro = text(formData, "intro");
+  const published = bool(formData, "published");
+
+  const headings = formData.getAll("block_heading").map((value) => String(value).trim());
+  const bodies = formData.getAll("block_body").map((value) => String(value));
+
+  const blocks = headings
+    .map((heading, index) => ({
+      heading,
+      body: (bodies[index] ?? "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+    }))
+    .filter((block) => block.heading.length > 0 || block.body.length > 0);
+
+  await db
+    .insert(sitePages)
+    .values({ slug, title, eyebrow, intro, blocks, published })
+    .onConflictDoUpdate({
+      target: sitePages.slug,
+      set: { title, eyebrow, intro, blocks, published, updatedAt: new Date() },
+    });
+
+  refreshStore();
+  redirect(`/admin/pages?saved=${encodeURIComponent(slug)}`);
+}
+
+export async function togglePagePublishedAction(formData: FormData) {
+  await requireOwner();
+
+  const slug = text(formData, "slug");
+  const [page] = await db.select().from(sitePages).where(eq(sitePages.slug, slug)).limit(1);
+  if (page) {
+    await db
+      .update(sitePages)
+      .set({ published: !page.published, updatedAt: new Date() })
+      .where(eq(sitePages.slug, slug));
+  }
+
+  refreshStore();
+  redirect("/admin/pages");
+}
+
+/* --------------------------------------------------------- contact messages */
+
+export async function markMessageHandledAction(formData: FormData) {
+  await requireAdmin();
+
+  const id = Math.round(Number(text(formData, "id", "0")));
+  const [message] = await db
+    .select()
+    .from(contactMessages)
+    .where(eq(contactMessages.id, id))
+    .limit(1);
+  if (message) {
+    await db
+      .update(contactMessages)
+      .set({ handled: !message.handled })
+      .where(eq(contactMessages.id, id));
+  }
+
+  revalidatePath("/admin/messages");
+}
+
+/* ------------------------------------------------------------- gift cards */
+
+export async function createGiftCardAction(formData: FormData) {
+  await requireManager();
+
+  const amount = Math.round(Number(text(formData, "amount", "0")));
+  const note = text(formData, "note");
+
+  if (!Number.isFinite(amount) || amount < 1000) {
+    redirect("/admin/gift-cards?error=Enter+an+amount+of+at+least+$10");
+  }
+
+  const code = text(formData, "code") || generateGiftCardCode();
+  await db
+    .insert(giftCards)
+    .values({ code: code.toUpperCase(), initialCents: amount, balanceCents: amount, note })
+    .onConflictDoNothing({ target: giftCards.code });
+
+  revalidatePath("/admin/gift-cards");
+  redirect(`/admin/gift-cards?created=${encodeURIComponent(code.toUpperCase())}`);
+}
+
+export async function toggleGiftCardAction(formData: FormData) {
+  await requireManager();
+
+  const id = Math.round(Number(text(formData, "id", "0")));
+  const [card] = await db.select().from(giftCards).where(eq(giftCards.id, id)).limit(1);
+  if (card) {
+    await db
+      .update(giftCards)
+      .set({ active: !card.active, updatedAt: new Date() })
+      .where(eq(giftCards.id, id));
+  }
+
+  revalidatePath("/admin/gift-cards");
+}
+
+export async function topUpGiftCardAction(formData: FormData) {
+  await requireManager();
+
+  const id = Math.round(Number(text(formData, "id", "0")));
+  const amount = Math.round(Number(text(formData, "amount", "0")));
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    redirect("/admin/gift-cards?error=Enter+a+top-up+amount");
+  }
+
+  const [card] = await db.select().from(giftCards).where(eq(giftCards.id, id)).limit(1);
+  if (card) {
+    await db
+      .update(giftCards)
+      .set({
+        balanceCents: card.balanceCents + amount,
+        initialCents: card.initialCents + amount,
+        updatedAt: new Date(),
+      })
+      .where(eq(giftCards.id, id));
+  }
+
+  revalidatePath("/admin/gift-cards");
+}
+
+/* -------------------------------------------------------- currency rules */
+
+export async function saveCurrencyRuleAction(formData: FormData) {
+  await requireOwner();
+
+  const code = text(formData, "code").toUpperCase();
+  const fxRate = Number(text(formData, "fxRate", "1"));
+  const markupPercent = Number(text(formData, "markupPercent", "0"));
+  const rounding = text(formData, "rounding", "none");
+  const active = bool(formData, "active");
+
+  if (!code || !Number.isFinite(fxRate) || fxRate <= 0) {
+    redirect("/admin/currency?error=Enter+a+valid+exchange+rate");
+  }
+
+  await db
+    .insert(currencyRules)
+    .values({
+      code,
+      fxRate,
+      markupPercent: Number.isFinite(markupPercent) ? markupPercent : 0,
+      rounding: ["none", "nearest_5", "nearest_9", "nearest_10"].includes(rounding)
+        ? rounding
+        : "none",
+      active,
+    })
+    .onConflictDoUpdate({
+      target: currencyRules.code,
+      set: {
+        fxRate,
+        markupPercent: Number.isFinite(markupPercent) ? markupPercent : 0,
+        rounding: ["none", "nearest_5", "nearest_9", "nearest_10"].includes(rounding)
+          ? rounding
+          : "none",
+        active,
+        updatedAt: new Date(),
+      },
+    });
+
+  refreshStore();
+  redirect(`/admin/currency?saved=${encodeURIComponent(code)}`);
+}
+
+/* ------------------------------------------------------------- team access */
+
+export async function createStockManagerAction(formData: FormData) {
+  await requireOwner();
+
+  const name = text(formData, "name");
+  const email = text(formData, "email").toLowerCase();
+  const password = text(formData, "password");
+
+  if (name.length < 2) {
+    redirect("/admin/team?error=Enter+the+team+member's+name");
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    redirect("/admin/team?error=Enter+a+valid+email+address");
+  }
+  if (password.length < 8) {
+    redirect("/admin/team?error=Password+must+be+at+least+8+characters");
+  }
+
+  const existing = await db.select({ id: adminUsers.id }).from(adminUsers).where(eq(adminUsers.email, email));
+  if (existing.length > 0) {
+    redirect("/admin/team?error=That+email+already+has+console+access");
+  }
+
+  const role = text(formData, "role") === "support" ? "support" : "stock_manager";
+
+  await db.insert(adminUsers).values({
+    email,
+    name,
+    passwordHash: hashAdminPassword(password),
+    role,
+  });
+
+  revalidatePath("/admin/team");
+  redirect(
+    `/admin/team?created=${encodeURIComponent(email)}&role=${role}`,
+  );
+}
+
+export async function toggleStockManagerAction(formData: FormData) {
+  await requireOwner();
+
+  const id = Math.round(Number(text(formData, "id", "0")));
+  const [member] = await db.select().from(adminUsers).where(eq(adminUsers.id, id)).limit(1);
+  if (member) {
+    await db.update(adminUsers).set({ active: !member.active }).where(eq(adminUsers.id, id));
+  }
+
+  revalidatePath("/admin/team");
+}
+
+export async function deleteStockManagerAction(formData: FormData) {
+  await requireOwner();
+
+  const id = Math.round(Number(text(formData, "id", "0")));
+  await db.delete(adminUsers).where(eq(adminUsers.id, id));
+
+  revalidatePath("/admin/team");
+}
+
+export async function changeAdminPasswordAction(formData: FormData) {
+  const admin = await requireManager();
+
+  /* The owner's credentials live in the environment, not the table. */
+  if (admin.role === "owner") {
+    redirect("/admin/profile?error=The+owner+password+is+set+in+the+environment");
+  }
+
+  const next = text(formData, "password");
+  if (next.length < 8) {
+    redirect("/admin/profile?error=Password+must+be+at+least+8+characters");
+  }
+
+  await db
+    .update(adminUsers)
+    .set({ passwordHash: hashAdminPassword(next) })
+    .where(eq(adminUsers.id, admin.id));
+
+  redirect("/admin/profile?saved=password");
+}
+
+/**
+ * The owner resets a team member's password. Verification is required: the
+ * owner must re-enter their own console password, so a shared or stolen
+ * browser session cannot quietly take over a team account.
+ */
+export async function resetStockManagerPasswordAction(formData: FormData) {
+  const owner = await requireOwner();
+
+  const id = Math.round(Number(text(formData, "id", "0")));
+  const password = text(formData, "password");
+  const ownerPassword = text(formData, "ownerPassword");
+
+  const [member] = await db.select().from(adminUsers).where(eq(adminUsers.id, id)).limit(1);
+  if (!member) {
+    redirect("/admin/team?error=That+account+no+longer+exists");
+  }
+
+  /* Verification step — the owner's own credentials. */
+  const verified = await verifyCredentials(owner.email, ownerPassword);
+  if (!verified || verified.role !== "owner") {
+    redirect("/admin/team?error=Verification+failed+-+check+your+owner+password");
+  }
+
+  if (password.length < 8) {
+    redirect("/admin/team?error=New+password+must+be+at+least+8+characters");
+  }
+
+  await db
+    .update(adminUsers)
+    .set({ passwordHash: hashAdminPassword(password) })
+    .where(eq(adminUsers.id, id));
+
+  revalidatePath("/admin/team");
+  redirect(`/admin/team?reset=${encodeURIComponent(member.email)}`);
+}
+
+/* -------------------------------------------------- team account editing */
+
+/**
+ * The owner rewrites a team account's name, email, role and — optionally —
+ * its password in one place. Verification is required: the owner re-enters
+ * their own console password, so a shared browser cannot take over accounts.
+ */
+export async function updateStockManagerAction(formData: FormData) {
+  const owner = await requireOwner();
+
+  const id = Math.round(Number(text(formData, "id", "0")));
+  const name = text(formData, "name");
+  const email = text(formData, "email").toLowerCase();
+  const role = text(formData, "role") === "support" ? "support" : "stock_manager";
+  const password = text(formData, "password");
+  const ownerPassword = text(formData, "ownerPassword");
+
+  const [member] = await db.select().from(adminUsers).where(eq(adminUsers.id, id)).limit(1);
+  if (!member) {
+    redirect("/admin/team?error=That+account+no+longer+exists");
+  }
+
+  /* Verification step — the owner's own credentials. */
+  const verified = await verifyCredentials(owner.email, ownerPassword);
+  if (!verified || verified.role !== "owner") {
+    redirect("/admin/team?error=Verification+failed+-+check+your+owner+password");
+  }
+
+  if (name.length < 2) {
+    redirect("/admin/team?error=Enter+the+team+member's+name");
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    redirect("/admin/team?error=Enter+a+valid+email+address");
+  }
+  if (password && password.length < 8) {
+    redirect("/admin/team?error=Password+must+be+at+least+8+characters");
+  }
+
+  const clash = await db.select({ id: adminUsers.id }).from(adminUsers).where(eq(adminUsers.email, email));
+  if (clash.some((row) => row.id !== id)) {
+    redirect("/admin/team?error=That+email+already+belongs+to+another+account");
+  }
+
+  await db
+    .update(adminUsers)
+    .set({
+      name,
+      email,
+      role,
+      ...(password ? { passwordHash: hashAdminPassword(password) } : {}),
+    })
+    .where(eq(adminUsers.id, id));
+
+  revalidatePath("/admin/team");
+  redirect(`/admin/team?saved=${encodeURIComponent(email)}`);
+}
+
+/** A console user edits their own name and email, and may rotate their password. */
+export async function updateOwnAdminProfileAction(formData: FormData) {
+  const admin = await requireAdmin();
+
+  /* The owner's identity lives in the environment. */
+  if (admin.role === "owner") {
+    redirect("/admin/profile?error=The+owner+email+and+password+are+set+in+the+environment");
+  }
+
+  const name = text(formData, "name");
+  const email = text(formData, "email").toLowerCase();
+  const currentPassword = text(formData, "currentPassword");
+  const newPassword = text(formData, "newPassword");
+
+  if (name.length < 2) {
+    redirect("/admin/profile?error=Enter+your+name");
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    redirect("/admin/profile?error=Enter+a+valid+email+address");
+  }
+
+  const [member] = await db.select().from(adminUsers).where(eq(adminUsers.id, admin.id)).limit(1);
+  if (!member) {
+    redirect("/admin/profile?error=Account+not+found");
+  }
+
+  /* Changing your own password needs the current one. */
+  if (newPassword) {
+    if (!verifyAdminPassword(currentPassword, member.passwordHash)) {
+      redirect("/admin/profile?error=Your+current+password+is+not+correct");
+    }
+    if (newPassword.length < 8) {
+      redirect("/admin/profile?error=New+password+must+be+at+least+8+characters");
+    }
+  }
+
+  const clash = await db.select({ id: adminUsers.id }).from(adminUsers).where(eq(adminUsers.email, email));
+  if (clash.some((row) => row.id !== admin.id)) {
+    redirect("/admin/profile?error=That+email+already+belongs+to+another+account");
+  }
+
+  await db
+    .update(adminUsers)
+    .set({
+      name,
+      email,
+      ...(newPassword ? { passwordHash: hashAdminPassword(newPassword) } : {}),
+    })
+    .where(eq(adminUsers.id, admin.id));
+
+  revalidatePath("/", "layout");
+  redirect("/admin/profile?saved=1");
 }

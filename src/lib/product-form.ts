@@ -28,7 +28,10 @@ export type ProductWrite = {
   isFeatured: boolean;
   isNewArrival: boolean;
   isBestSeller: boolean;
+  completeLook: string[];
 };
+
+export type VariantStockInput = { color: string; size: string; stock: number };
 
 const FALLBACK_IMAGE =
   "https://images.pexels.com/photos/30569741/pexels-photo-30569741.jpeg?auto=compress&cs=tinysrgb&fit=crop&w=1000&h=1330";
@@ -67,11 +70,34 @@ export function slugify(value: string) {
 }
 
 /** Turns the submitted form into a row we can write straight to Postgres. */
-export function parseProductForm(form: FormData): { id: number; values: ProductWrite } {
+export function parseProductForm(form: FormData): {
+  id: number;
+  values: ProductWrite;
+  variantStocks: VariantStockInput[];
+} {
   const name = text(form, "name") || "Untitled piece";
   const compareAt = numeric(form, "compareAt", 0);
   const colours = parseColours(text(form, "colors"));
   const sizes = list(text(form, "sizes"));
+
+  /* Colour × size counts from the stock editor, one JSON field. */
+  const variantStocks: VariantStockInput[] = (() => {
+    try {
+      const raw = String(form.get("variantStocks") ?? "");
+      if (!raw.trim()) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((row) => ({
+          color: String(row?.color ?? "").trim(),
+          size: String(row?.size ?? "").trim(),
+          stock: Math.max(0, Math.round(Number(row?.stock ?? 0))),
+        }))
+        .filter((row) => row.color.length > 0 && row.size.length > 0);
+    } catch {
+      return [];
+    }
+  })();
   const imageRows = lines(text(form, "images"))
     .map(parseImageLine)
     .filter((row) => row.url.length > 0);
@@ -80,6 +106,7 @@ export function parseProductForm(form: FormData): { id: number; values: ProductW
     .filter((row) => row.url.length > 0);
 
   return {
+    variantStocks,
     id: Math.max(0, Math.round(numeric(form, "id", 0))),
     values: {
       slug: slugify(text(form, "slug") || name),
@@ -102,11 +129,17 @@ export function parseProductForm(form: FormData): { id: number; values: ProductW
       details: lines(text(form, "details")),
       materials: text(form, "materials"),
       care: text(form, "care"),
-      stock: Math.max(0, Math.round(numeric(form, "stock", 0))),
+      stock: variantStocks.length > 0
+        ? variantStocks.reduce((total, row) => total + row.stock, 0)
+        : Math.max(0, Math.round(numeric(form, "stock", 0))),
       badge: text(form, "badge") || null,
       isFeatured: bool(form, "isFeatured"),
       isNewArrival: bool(form, "isNewArrival"),
       isBestSeller: bool(form, "isBestSeller"),
+      completeLook: String(form.get("completeLook") ?? "")
+        .split(/[\n,]/)
+        .map((entry) => entry.trim())
+        .filter(Boolean),
     },
   };
 }

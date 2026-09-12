@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 
-import { isAdmin } from "@/lib/auth";
+import { getCurrentAdmin } from "@/lib/auth";
 import {
   getAppearance,
   resetAppearance,
@@ -17,7 +17,8 @@ export const dynamic = "force-dynamic";
 
 /** Saves the storefront appearance (hero media and copy) in one request. */
 export async function POST(request: Request) {
-  if (!(await isAdmin())) {
+  const admin = await getCurrentAdmin();
+  if (!admin || admin.role !== "owner") {
     return NextResponse.json({ ok: false, error: "Shop owner access only." }, { status: 401 });
   }
 

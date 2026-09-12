@@ -21,6 +21,74 @@ export function LoginForm({
   redirectTo?: string;
 }) {
   const [signup, setSignup] = useState(initialMode === "signup");
+  const [forgot, setForgot] = useState(false);
+  const [resetCode, setResetCode] = useState<string | null>(null);
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
+
+  /** Step 1 — the client proves who they are by requesting a code. */
+  async function onRequestReset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+    const data = new FormData(event.currentTarget);
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/customer/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: String(data.get("email") ?? "") }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { ok?: boolean; code?: string; error?: string }
+        | null;
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error ?? "Could not start the reset.");
+      }
+      setResetCode(payload.code ?? "");
+      setResetNotice(
+        payload.code
+          ? "Verification code generated — it expires in 15 minutes. On a hosted store this is emailed rather than shown."
+          : "If that email has an account, a code is on its way.",
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not start the reset.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  /** Step 2 — the code plus a new password. */
+  async function onConfirmReset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+    const data = new FormData(event.currentTarget);
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/customer/reset", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: String(data.get("email") ?? ""),
+          code: String(data.get("code") ?? ""),
+          password: String(data.get("password") ?? ""),
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { ok?: boolean; error?: string }
+        | null;
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error ?? "Could not reset your password.");
+      }
+      setForgot(false);
+      setResetCode(null);
+      setResetNotice("Your password has been changed — sign in with the new one.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not reset your password.");
+    } finally {
+      setPending(false);
+    }
+  }
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,20 +156,72 @@ export function LoginForm({
         </button>
       </div>
 
+      {resetNotice && (
+        <p className="mt-6 border-l-2 border-ok bg-sage-tint px-4 py-3 text-[13px] leading-relaxed text-ok">
+          {resetNotice}
+        </p>
+      )}
+
       {error && (
         <p className="mt-6 border-l-2 border-ember bg-bone px-4 py-3 text-[13px] text-ember">
           {error}
         </p>
       )}
 
-      {/* A real form with autocomplete hints, so Chrome, Safari and Google
-          Password Manager offer to save and then autofill these credentials. */}
-      <form
-        onSubmit={onSubmit}
-        action="/account"
-        method="post"
-        className="mt-6 space-y-5"
-      >
+      {forgot ? (
+        resetCode === null ? (
+          <form onSubmit={onRequestReset} className="mt-6 space-y-5">
+            <label className="block">
+              <span className={label}>Email</span>
+              <input name="email" type="email" required className={field} placeholder="you@example.com" />
+            </label>
+            <button
+              type="submit"
+              disabled={pending}
+              className={`inline-flex w-full items-center justify-center gap-2 bg-ink py-3.5 text-[11px] font-medium uppercase tracking-[0.22em] text-bone transition-colors hover:bg-ink-700 ${pending ? "cursor-wait opacity-70" : ""}`}
+            >
+              {pending ? "Sending code" : "Send verification code"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setForgot(false); setError(null); }}
+              className="link-underline w-full text-[11.5px] uppercase tracking-[0.16em] text-ink-300"
+            >
+              Back to sign in
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={onConfirmReset} className="mt-6 space-y-5">
+            <label className="block">
+              <span className={label}>Email</span>
+              <input name="email" type="email" required className={field} placeholder="you@example.com" />
+            </label>
+            <label className="block">
+              <span className={label}>Verification code</span>
+              <input name="code" required inputMode="numeric" className={field} placeholder="6-digit code" />
+            </label>
+            <label className="block">
+              <span className={label}>New password (min 8 characters)</span>
+              <input name="password" type="password" required minLength={8} className={field} placeholder="••••••••" />
+            </label>
+            <button
+              type="submit"
+              disabled={pending}
+              className={`inline-flex w-full items-center justify-center gap-2 bg-ink py-3.5 text-[11px] font-medium uppercase tracking-[0.22em] text-bone transition-colors hover:bg-ink-700 ${pending ? "cursor-wait opacity-70" : ""}`}
+            >
+              {pending ? "Changing password" : "Change my password"}
+            </button>
+          </form>
+        )
+      ) : (
+        /* A real form with autocomplete hints, so Chrome, Safari and Google
+           Password Manager offer to save and then autofill these credentials. */
+        <form
+          onSubmit={onSubmit}
+          action="/account"
+          method="post"
+          className="mt-6 space-y-5"
+        >
         {signup && (
           <label className="block">
             <span className={label}>Full name</span>
@@ -163,11 +283,22 @@ export function LoginForm({
               ? "Create account"
               : "Sign in"}
         </button>
-      </form>
+        </form>
+      )}
+
+      {!forgot && (
+        <button
+          type="button"
+          onClick={() => { setForgot(true); setError(null); setResetCode(null); setResetNotice(null); }}
+          className="link-underline mt-5 text-[11.5px] uppercase tracking-[0.16em] text-ink-300"
+        >
+          Forgot your password?
+        </button>
+      )}
 
       <p className="mt-6 border-t border-sand pt-5 text-[11.5px] leading-relaxed text-ink-300">
-        By continuing you agree to our terms of sale and privacy policy. Card details are never
-        stored in full — only the brand and last four digits.
+        By continuing you agree to our terms of sale and privacy policy. Card details are only
+        entered at checkout and are never stored on your account.
       </p>
 
       <Link

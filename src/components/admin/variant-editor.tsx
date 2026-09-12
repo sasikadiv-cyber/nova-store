@@ -120,35 +120,68 @@ export function ColourEditor({ initial }: { initial: string }) {
         <span className="text-[11.5px] text-ink-300">{colours.length} colourways</span>
       </div>
 
-      {/* editable list */}
+      {/* editable list — one colour per row, stacked one under another */}
       <ul className="mt-3 space-y-2">
         {colours.map((colour, index) => (
-          <li key={`${colour.name}-${index}`} className="flex flex-wrap items-center gap-2">
+          <li
+            key={`${colour.name}-${index}`}
+            className="grid gap-2 border border-sand bg-bone p-3 sm:grid-cols-[auto_auto_1fr_auto_auto] sm:items-center"
+          >
             <input
               type="color"
               value={colour.hex}
               onChange={(event) => update(index, { hex: event.target.value })}
-              aria-label={`${colour.name} hex`}
-              className="h-10 w-12 shrink-0 cursor-pointer border border-ink/15 bg-bone p-1"
+              aria-label={`${colour.name} swatch`}
+              className="h-10 w-12 shrink-0 cursor-pointer border border-ink/15 bg-linen p-1"
             />
+
+            <input
+              value={colour.hex}
+              onChange={(event) => update(index, { hex: event.target.value })}
+              aria-label={`${colour.name} hex code`}
+              spellCheck={false}
+              className="w-[86px] border border-ink/15 bg-linen px-2 py-2 font-mono text-[12.5px] tracking-[0.04em] outline-none focus:border-ink"
+            />
+
             <input
               value={colour.name}
               onChange={(event) => update(index, { name: event.target.value })}
               placeholder="Colour name"
-              className="min-w-[120px] flex-1 border border-ink/15 bg-bone px-3 py-2 text-[13px] outline-none focus:border-ink"
+              className="w-full border border-ink/15 bg-linen px-3 py-2 text-[13px] outline-none focus:border-ink"
             />
-            <select
-              value={colour.family}
-              onChange={(event) => update(index, { family: event.target.value })}
-              className="border border-ink/15 bg-bone px-2 py-2 text-[12.5px] outline-none focus:border-ink"
-              aria-label="Colour family"
-            >
-              {FAMILIES.map((family) => (
-                <option key={family} value={family}>
-                  {family}
+
+            <div className="flex w-full flex-col gap-2 sm:w-auto">
+              <select
+                value={FAMILIES.includes(colour.family) ? colour.family : "__custom"}
+                onChange={(event) =>
+                  update(index, {
+                    family: event.target.value === "__custom" ? "" : event.target.value,
+                  })
+                }
+                className="border border-ink/15 bg-linen px-2 py-2 text-[12.5px] outline-none focus:border-ink"
+                aria-label="Colour family"
+              >
+                {FAMILIES.map((family) => (
+                  <option key={family} value={family}>
+                    {family}
+                  </option>
+                ))}
+                <option value="__custom">
+                  {FAMILIES.includes(colour.family) ? "Custom…" : "Custom…"}
                 </option>
-              ))}
-            </select>
+              </select>
+
+              {!FAMILIES.includes(colour.family) && (
+                <input
+                  value={colour.family}
+                  onChange={(event) => update(index, { family: event.target.value })}
+                  placeholder="Custom family"
+                  className="w-full border border-brass/60 bg-brass/10 px-2 py-2 text-[12.5px] outline-none focus:border-ink sm:w-[130px]"
+                  aria-label="Custom colour family"
+                />
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => setColours((current) => current.filter((_, i) => i !== index))}
@@ -221,6 +254,25 @@ export function SizeEditor({ initial, initialType }: { initial: string; initialT
             </button>
           );
         })}
+
+        {/* Sizes the owner typed in are shown as chips too, so an addition is
+           always visible — not only in the summary line. */}
+        {sizes
+          .filter((size) => !presets.includes(size))
+          .map((size) => (
+            <button
+              key={size}
+              type="button"
+              onClick={() => toggle(size)}
+              title={`Remove ${size}`}
+              className="inline-flex items-center gap-1.5 border border-brass bg-brass/15 px-3 py-2 text-[12.5px] text-ink transition-colors hover:border-ember hover:bg-ember/10"
+            >
+              {size}
+              <span aria-hidden="true" className="text-[11px] text-ink-300">
+                ×
+              </span>
+            </button>
+          ))}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

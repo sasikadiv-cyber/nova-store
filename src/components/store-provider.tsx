@@ -11,7 +11,8 @@ import {
   type ReactNode,
 } from "react";
 
-import { formatMoney, type CurrencyCode } from "@/lib/currency";
+import { type CurrencyCode } from "@/lib/currency";
+import { priceWithRules, type CurrencyRuleMap } from "@/lib/currency-rules";
 
 export type CartLine = {
   key: string;
@@ -99,7 +100,13 @@ function applyTheme(theme: Theme) {
   }
 }
 
-export function StoreProvider({ children }: { children: ReactNode }) {
+export function StoreProvider({
+  children,
+  currencyRules,
+}: {
+  children: ReactNode;
+  currencyRules?: CurrencyRuleMap;
+}) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [currency, setCurrencyState] = useState<CurrencyCode>("USD");
   const [theme, setThemeState] = useState<Theme>("light");
@@ -396,11 +403,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCurrency: (code: CurrencyCode) => setCurrencyState(code),
       setTheme,
       toggleTheme,
-      price: (cents: number) => formatMoney(cents, currency),
+      price: (cents: number) => priceWithRules(cents, currency, currencyRules),
     };
   }, [
     lines,
     currency,
+    currencyRules,
     theme,
     customer,
     sessionReady,

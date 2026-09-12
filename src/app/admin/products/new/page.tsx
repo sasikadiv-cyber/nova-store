@@ -3,10 +3,12 @@ import { asc } from "drizzle-orm";
 import { db } from "@/db";
 import { collections } from "@/db/schema";
 import { ProductForm } from "@/components/admin/product-form";
+import { requireManagerPage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewProductPage() {
+  await requireManagerPage();
   const allCollections = await db.select().from(collections).orderBy(asc(collections.sortOrder));
 
   return (

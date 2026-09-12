@@ -1,22 +1,38 @@
 import Link from "next/link";
 
-import { isAdmin, OWNER_EMAIL } from "@/lib/auth";
-import { loginAction, logoutAction } from "./actions";
+import { AdminLoginForm } from "@/components/admin/login-form";
+import { CollapsibleNav } from "@/components/collapsible-nav";
+import { getCurrentAdmin } from "@/lib/auth";
+import { logoutAction } from "./actions";
 import { SubmitButton } from "@/components/admin/submit-button";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Store management" };
 
-const NAV = [
+/* Every console role reaches these. */
+const BASE_NAV = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/orders", label: "Orders" },
+  { href: "/admin/reviews", label: "Reviews" },
+  { href: "/admin/messages", label: "Messages" },
+];
+
+/* Stock managers additionally run the catalogue. */
+const MANAGER_NAV = [
   { href: "/admin/products", label: "Products & stock" },
   { href: "/admin/stock", label: "Stock management" },
   { href: "/admin/collections", label: "Collections" },
-  { href: "/admin/appearance", label: "Site appearance" },
+  { href: "/admin/gift-cards", label: "Gift cards" },
   { href: "/admin/discounts", label: "Discount codes" },
-  { href: "/admin/orders", label: "Orders" },
-  { href: "/admin/reviews", label: "Reviews" },
+];
+
+/* Store-owner only: the storefront itself, pricing and the team. */
+const OWNER_NAV = [
+  { href: "/admin/appearance", label: "Site appearance" },
+  { href: "/admin/pages", label: "Site pages" },
+  { href: "/admin/currency", label: "Currency rules" },
+  { href: "/admin/team", label: "Team & access" },
 ];
 
 export default async function AdminLayout({
@@ -24,70 +40,13 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const authed = await isAdmin();
+  const admin = await getCurrentAdmin();
 
-  if (!authed) {
+  if (!admin) {
     return (
       <div className="fixed inset-0 z-[200] overflow-y-auto bg-bone">
         <div className="flex min-h-full items-center justify-center px-5 py-16">
-          <form
-            action={loginAction}
-            className="w-full max-w-[420px] border border-sand bg-linen p-8 shadow-panel"
-          >
-            <p className="font-display text-[22px] tracking-[0.3em]">NOVA</p>
-            <p className="eyebrow mt-3 text-sage">Store management</p>
-
-            <h1 className="mt-6 text-3xl">Sign in</h1>
-            <p className="mt-3 text-[13px] leading-relaxed text-ink-300">
-              This area controls the live storefront — products, collections, discount codes,
-              orders and stock. Restricted access.
-            </p>
-
-            <label className="mt-7 block">
-              <span className="eyebrow text-ink-300">Email</span>
-              <input
-                name="email"
-                id="nova-admin-email"
-                type="email"
-                required
-                {...({ autocomplete: "username" } as Record<string, string>)}
-                className="mt-2 w-full border border-ink/15 bg-bone px-3.5 py-3 text-[14px] outline-none focus:border-ink"
-              />
-            </label>
-
-            <label className="mt-4 block">
-              <span className="eyebrow text-ink-300">Password</span>
-              <input
-                name="password"
-                id="nova-admin-password"
-                type="password"
-                required
-                {...({ autocomplete: "current-password" } as Record<string, string>)}
-                className="mt-2 w-full border border-ink/15 bg-bone px-3.5 py-3 text-[14px] outline-none focus:border-ink"
-              />
-            </label>
-
-            <SubmitButton
-              label="Enter console"
-              pendingLabel="Signing in"
-              className="mt-7 w-full bg-ink py-3.5 text-[11px] font-medium uppercase tracking-[0.22em] text-bone transition-colors hover:bg-ink-700"
-            />
-
-            <p className="mt-5 border-t border-sand pt-4 text-[11.5px] leading-relaxed text-ink-300">
-              Sign in with your owner email:{" "}
-              <span className="text-ink">{OWNER_EMAIL}</span>
-              <br />
-              The password is set in your environment as{" "}
-              <code>ADMIN_PASSWORD</code>.
-            </p>
-
-            <Link
-              href="/"
-              className="link-underline mt-5 inline-block text-[11.5px] uppercase tracking-[0.16em] text-ink-300"
-            >
-              Back to storefront
-            </Link>
-          </form>
+          <AdminLoginForm />
         </div>
       </div>
     );
@@ -103,17 +62,32 @@ export default async function AdminLayout({
             </Link>
             <p className="eyebrow mt-2 text-sage">Store management</p>
 
-            <nav className="mt-9 flex flex-wrap gap-1 lg:flex-col">
-              {NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="border-bone-dark px-3 py-2.5 text-[13px] text-ink-500 transition-colors hover:bg-bone-dark hover:text-ink lg:border-b lg:border-sand lg:px-0"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            <p className="mt-8 border-t border-sand pt-5 text-[12.5px] leading-relaxed">
+              <span className="block text-ink">{admin.name}</span>
+              <span className="block break-all text-ink-300">{admin.email}</span>
+              <span
+                className={`mt-2 inline-block px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] ${
+                  admin.role === "owner" ? "bg-brass/15 text-brass" : "bg-sage-tint text-sage"
+                }`}
+              >
+                {admin.role === "owner"
+                  ? "Store owner"
+                  : admin.role === "support"
+                    ? "Client support"
+                    : "Stock manager"}
+              </span>
+            </p>
+
+            <CollapsibleNav
+              sections={[
+                { items: BASE_NAV },
+                ...(admin.role !== "support"
+                  ? [{ title: "Catalogue", items: MANAGER_NAV }]
+                  : []),
+                ...(admin.role === "owner" ? [{ title: "Store owner", items: OWNER_NAV }] : []),
+                { title: "Signed in", items: [{ href: "/admin/profile", label: "Profile" }] },
+              ]}
+            />
 
             <div className="mt-auto hidden pt-8 lg:block">
               <Link

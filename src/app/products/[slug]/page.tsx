@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
 import { ProductGallery, PurchasePanel, ReviewsSection } from "@/components/product-detail";
 import { Reveal } from "@/components/ui";
-import { getProductBySlug, getProductReviews, getRelatedProducts } from "@/lib/queries";
+import { getCompleteLook, getProductBySlug, getProductReviews, getRelatedProducts } from "@/lib/queries";
 import { ensureVariants, getVariants, toStockView } from "@/lib/variants";
 
 export const dynamic = "force-dynamic";
@@ -44,8 +44,9 @@ export default async function ProductPage({ params }: PageProps) {
   await ensureVariants(product.id);
   const variantStock = toStockView(await getVariants(product.id));
 
-  const [reviews, related] = await Promise.all([
+  const [reviews, look, related] = await Promise.all([
     getProductReviews(product.id),
+    getCompleteLook(product.completeLook),
     getRelatedProducts(product, 4),
   ]);
 
@@ -167,6 +168,34 @@ export default async function ProductPage({ params }: PageProps) {
           reviewCount={product.reviewCount}
         />
       </div>
+
+      {/* ------------------------------------------------ complete the look */}
+      {look.length > 0 && (
+        <section className="border-t border-sand">
+          <div className="mx-auto w-full max-w-[1600px] px-5 py-16 md:px-10 md:py-20">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="eyebrow text-brass">Styled together</p>
+                <h2 className="mt-3 text-[clamp(1.8rem,3.6vw,2.8rem)] leading-[1.08]">
+                  Complete the look
+                </h2>
+              </div>
+              <p className="max-w-sm text-[13.5px] leading-relaxed text-ink-300">
+                The pieces our stylists pair with the {product.name.toLowerCase()} — add them all
+                in one place.
+              </p>
+            </div>
+
+            <div className="mt-10 grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-4">
+              {look.map((item, index) => (
+                <Reveal key={item.id} delay={index * 90}>
+                  <ProductCard product={item} compact />
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ----------------------------------------------------------- related */}
       <section className="border-t border-sand bg-linen">

@@ -61,6 +61,8 @@ export const products = pgTable(
     isFeatured: boolean("is_featured").notNull().default(false),
     isNewArrival: boolean("is_new_arrival").notNull().default(false),
     isBestSeller: boolean("is_best_seller").notNull().default(false),
+    /** Slugs of the pieces shown together as "Complete the look". */
+    completeLook: jsonb("complete_look").$type<string[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -73,6 +75,9 @@ export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  /** One-time code for "forgot password", hashed, with its own expiry. */
+  resetCodeHash: text("reset_code_hash"),
+  resetExpires: timestamp("reset_expires", { withTimezone: true }),
   fullName: text("full_name").notNull(),
   phone: text("phone").notNull().default(""),
   defaultAddress1: text("default_address1").notNull().default(""),
@@ -233,27 +238,6 @@ export const discountCodes = pgTable("discount_codes", {
 
 export type DiscountCode = typeof discountCodes.$inferSelect;
 
-
-
-/**
- * Saved cards. Only the brand, last four digits and expiry are kept — never
- * the full number or the CVC, matching real PCI practice for a demo store.
- */
-export const paymentMethods = pgTable("payment_methods", {
-  id: serial("id").primaryKey(),
-  customerId: integer("customer_id")
-    .notNull()
-    .references(() => customers.id, { onDelete: "cascade" }),
-  brand: text("brand").notNull(),
-  last4: text("last4").notNull(),
-  expMonth: integer("exp_month").notNull(),
-  expYear: integer("exp_year").notNull(),
-  isDefault: boolean("is_default").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type PaymentMethod = typeof paymentMethods.$inferSelect;
-
 /** One row per status change, so the customer gets a real tracking timeline. */
 export const orderEvents = pgTable(
   "order_events",
@@ -282,3 +266,85 @@ export type Collection = typeof collections.$inferSelect;
 export type Review = typeof reviews.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
+
+/* ------------------------------------------------------------------ pages */
+
+/** One editable block of copy on an informational page. */
+export type PageBlock = { heading: string; body: string[] };
+
+/**
+ * Informational pages the shop owner can rewrite from the console — privacy,
+ * terms, help, contact, shipping, returns and the rest of the footer links.
+ */
+export const sitePages = pgTable("site_pages", {
+  slug: text("slug").primaryKey(),
+  title: text("title").notNull(),
+  eyebrow: text("eyebrow").notNull().default(""),
+  intro: text("intro").notNull().default(""),
+  blocks: jsonb("blocks").$type<PageBlock[]>().notNull().default([]),
+  published: boolean("published").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type SitePage = typeof sitePages.$inferSelect;
+
+/** Messages sent from the contact page, read in the console. */
+export const contactMessages = pgTable("contact_messages", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  subject: text("subject").notNull().default(""),
+  message: text("message").notNull(),
+  handled: boolean("handled").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ContactMessage = typeof contactMessages.$inferSelect;
+
+/* ------------------------------------------------- currency pricing rules */
+
+/** Per-currency FX override, markup and rounding for displayed prices. */
+export const currencyRules = pgTable("currency_rules", {
+  code: text("code").primaryKey(),
+  fxRate: real("fx_rate").notNull().default(1),
+  markupPercent: real("markup_percent").notNull().default(0),
+  rounding: text("rounding").notNull().default("none"),
+  active: boolean("active").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type CurrencyRuleRow = typeof currencyRules.$inferSelect;
+
+/* ------------------------------------------------------------- gift cards */
+
+/** A code with a running balance, redeemed at checkout like a discount. */
+export const giftCards = pgTable("gift_cards", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  initialCents: integer("initial_cents").notNull(),
+  balanceCents: integer("balance_cents").notNull(),
+  note: text("note").notNull().default(""),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type GiftCardRow = typeof giftCards.$inferSelect;
+
+/* ------------------------------------------------------------- team access */
+
+/** Console accounts. The store owner comes from the environment; everyone
+ *  else is a stock manager created here by the owner. */
+export const adminUsers = pgTable("admin_users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  name: text("name").notNull().default(""),
+  role: text("role").notNull().default("stock_manager"),
+  active: boolean("active").notNull().default(true),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AdminUserRow = typeof adminUsers.$inferSelect;

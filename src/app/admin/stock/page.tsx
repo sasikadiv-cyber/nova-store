@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { eq, ilike, or, sql, type SQL } from "drizzle-orm";
 
+import { FilterChip } from "@/components/admin/filter-chip";
 import { StockMatrix } from "@/components/admin/stock-matrix";
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import { ensureAllVariants, getVariantsForProducts } from "@/lib/variants";
+import { requireManagerPage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ export default async function AdminStock({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireManagerPage();
   const params = await searchParams;
 
   /* Creates variant rows for any product that lacks them, and for any newly
@@ -93,28 +96,17 @@ export default async function AdminStock({
 
       <div className="mt-8 flex flex-wrap items-center gap-2">
         <span className="eyebrow mr-1 text-ink-300">Quick filter</span>
-        <Link
-          href="/admin/stock"
-          className={`border px-3 py-1.5 text-[11.5px] transition-colors ${
-            category === ""
-              ? "border-ink bg-ink text-bone"
-              : "border-ink/15 text-ink-500 hover:border-ink/45"
-          }`}
-        >
+        <FilterChip href="/admin/stock" active={category === ""}>
           All
-        </Link>
+        </FilterChip>
         {categoryRows.map((row) => (
-          <Link
+          <FilterChip
             key={row.category}
             href={`/admin/stock?category=${encodeURIComponent(row.category)}`}
-            className={`border px-3 py-1.5 text-[11.5px] transition-colors ${
-              category === row.category
-                ? "border-ink bg-ink text-bone"
-                : "border-ink/15 text-ink-500 hover:border-ink/45"
-            }`}
+            active={category === row.category}
           >
             {row.category} · {row.count}
-          </Link>
+          </FilterChip>
         ))}
       </div>
 

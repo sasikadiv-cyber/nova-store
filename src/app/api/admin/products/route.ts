@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
 import { products } from "@/db/schema";
-import { isAdmin } from "@/lib/auth";
+import { requireManager } from "@/lib/auth";
 import { parseProductForm } from "@/lib/product-form";
+import { ensureVariants, syncProductStock } from "@/lib/variants";
+import { productVariants } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +19,7 @@ export const dynamic = "force-dynamic";
  * editing works identically on every build.
  */
 export async function POST(request: Request) {
-  if (!(await isAdmin())) {
-    return NextResponse.json({ ok: false, error: "Shop owner access only." }, { status: 401 });
-  }
+  await requireManager();
 
   // Same-origin guard (the form is same-origin only).
   const origin = request.headers.get("origin");
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { id, values } = parsed;
+  const { id, values, variantStocks } = parsed;
 
   if (values.priceCents <= 0) {
     return NextResponse.json({ ok: false, error: "Enter a price above zero." }, { status: 400 });
@@ -59,6 +59,8 @@ export async function POST(request: Request) {
   if (!values.name.trim()) {
     return NextResponse.json({ ok: false, error: "Enter a product name." }, { status: 400 });
   }
+
+  let insertedId = id;
 
   try {
     if (id > 0) {
@@ -97,10 +99,33 @@ export async function POST(request: Request) {
     } else {
       /* Creating: never fail on a slug clash — pick the next free one. */
       values.slug = await nextAvailableSlug(values.slug);
-      await db.insert(products).values(values);
+      const [created] = await db
+        .insert(products)
+        .values(values)
+        .returning({ id: products.id });
+      insertedId = created.id;
     }
 
     revalidatePath("/", "layout");
+
+    /* Colour × size counts from the form are written to the variants. */
+    if (variantStocks.length > 0) {
+      await ensureVariants(id > 0 ? id : insertedId);
+      for (const row of variantStocks) {
+        await db
+          .update(productVariants)
+          .set({ stock: row.stock })
+          .where(
+            and(
+              eq(productVariants.productId, id > 0 ? id : insertedId),
+              eq(productVariants.color, row.color),
+              eq(productVariants.size, row.size),
+            ),
+          );
+      }
+      await syncProductStock(id > 0 ? id : insertedId);
+    }
+
     return NextResponse.json({ ok: true, id: id > 0 ? id : null, slug: values.slug });
   } catch (error) {
     const causedBy = (error as { cause?: { message?: string } })?.cause?.message ?? "";

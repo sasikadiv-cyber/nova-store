@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { CountUp } from "@/components/count-up";
 import { ProductCard } from "@/components/product-card";
 import { Price, Reveal, Stars } from "@/components/ui";
 import { px } from "@/lib/seed-data";
@@ -116,17 +117,19 @@ export default async function HomePage() {
           <div className="mt-14 flex flex-col gap-8 border-t border-ivory/15 pt-7 lg:flex-row lg:items-end lg:justify-between">
             <dl className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-4 lg:gap-x-12">
               {[
-                { value: "94", label: "Countries served" },
-                { value: `${stats.products}`, label: "Pieces in season" },
-                { value: `${stats.avgRating.toFixed(1)}`, label: "Average rating" },
-                { value: "30", label: "Day returns" },
+                { value: 94, decimals: 0, label: "Countries served" },
+                { value: stats.products, decimals: 0, label: "Pieces in season" },
+                { value: stats.avgRating, decimals: 1, label: "Average rating" },
+                { value: 30, decimals: 0, label: "Day returns" },
               ].map((item, index) => (
                 <div
                   key={item.label}
                   className="animate-fade-up"
                   style={{ animationDelay: `${420 + index * 90}ms` }}
                 >
-                  <dt className="font-display text-[34px] leading-none md:text-4xl">{item.value}</dt>
+                  <dt className="font-display text-[34px] leading-none md:text-4xl">
+                    <CountUp value={item.value} decimals={item.decimals} />
+                  </dt>
                   <dd className="eyebrow mt-2.5 text-[9.5px] text-ivory/55">{item.label}</dd>
                 </div>
               ))}
@@ -172,11 +175,12 @@ export default async function HomePage() {
       </section>
 
       {/* -------------------------------------------------- seasonal offer */}
-      {/* Sits below the hero in normal flow — the hero's own bottom padding
-          provides the breathing room, so the card never overlaps the hero. */}
+      {/* Kept clear of the hero with the same rhythm as the section that
+           follows it, so the card breathes instead of butting straight
+           against the hero's bottom edge. */}
       {appearance.promo_enabled === "true" && (
-        <section className="border-y border-sand bg-linen">
-          <div className="mx-auto grid w-full max-w-[1600px] items-stretch gap-0 lg:grid-cols-2">
+        <section className="mt-20 border-y border-sand bg-linen md:mt-28">
+          <div className="mx-auto grid w-full max-w-[1600px] items-stretch gap-0 px-5 md:px-10 lg:grid-cols-2">
             <div className="relative min-h-[240px] overflow-hidden bg-bone-dark lg:min-h-[420px]">
               {appearance.promo_image && (
                 /* eslint-disable-next-line @next/next/no-img-element */

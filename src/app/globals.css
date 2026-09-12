@@ -361,3 +361,22 @@ html[data-theme="dark"] .skeleton {
     animation: none !important;
   }
 }
+
+/* A visible, slim scrollbar for the stock matrix, so extra sizes are
+   discoverable instead of silently cut off. */
+.stock-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-stone) transparent;
+}
+.stock-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.stock-scroll::-webkit-scrollbar-track {
+  background: var(--color-bone-dark);
+}
+.stock-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-stone);
+}
+.stock-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-300);
+}

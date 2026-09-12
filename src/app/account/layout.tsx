@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CollapsibleNav } from "@/components/collapsible-nav";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 import { signOutAction } from "./actions";
 
@@ -12,7 +13,6 @@ const NAV = [
   { href: "/account/orders", label: "Orders & tracking" },
   { href: "/account/favourites", label: "Wishlist" },
   { href: "/account/reviews", label: "My reviews" },
-  { href: "/account/payment", label: "Payment methods" },
   { href: "/account/profile", label: "Profile & address" },
 ];
 
@@ -29,7 +29,7 @@ export default async function AccountLayout({
         <p className="eyebrow text-sage">Account</p>
         <h1 className="mt-4 text-[clamp(2.2rem,5vw,3.6rem)]">Please sign in</h1>
         <p className="mt-4 max-w-lg text-[14.5px] leading-relaxed text-ink-300">
-          Sign in to follow your orders, review your pieces and keep your payment details on file.
+          Sign in to follow your orders, review your pieces and keep your wishlist in one place.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
@@ -58,17 +58,7 @@ export default async function AccountLayout({
             <p className="mt-2.5 font-display text-[26px] leading-tight">{customer.fullName}</p>
             <p className="mt-1 truncate text-[12.5px] text-ink-300">{customer.email}</p>
 
-            <nav className="mt-8 flex flex-wrap gap-x-6 gap-y-2 lg:flex-col lg:gap-0">
-              {NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="border-bone-dark py-2 text-[13px] text-ink-500 transition-colors hover:text-ink lg:border-b lg:border-sand"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            <CollapsibleNav label="Account menu" variant="account" sections={[{ items: NAV }]} />
 
             <form action={signOutAction} className="mt-7">
               <button

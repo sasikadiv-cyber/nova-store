@@ -3,9 +3,11 @@ import { Cormorant_Garamond, Inter } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { CartDrawer } from "@/components/cart-drawer";
+import { CookieConsent } from "@/components/cookie-consent";
 import { SiteFooter } from "@/components/site-footer";
 import { PromoPopup } from "@/components/promo-popup";
 import { QuickViewProvider } from "@/components/quick-view";
+import { getCurrencyRuleMap } from "@/lib/currency-rules-server";
 import { getAppearance } from "@/lib/site-settings";
 import { SiteHeader } from "@/components/site-header";
 import { StoreProvider } from "@/components/store-provider";
@@ -61,6 +63,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const appearance = await getAppearance();
+  const currencyRules = await getCurrencyRuleMap();
   return (
     <html lang="en" className={`${cormorant.variable} ${inter.variable}`}>
       <head>
@@ -75,7 +78,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <meta name="theme-color" content="#f7f4ef" />
       </head>
       <body className="bg-bone text-ink antialiased">
-        <StoreProvider>
+        <StoreProvider currencyRules={currencyRules}>
           <QuickViewProvider>
             <SiteHeader
               nav={{
@@ -112,6 +115,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               />
             )}
           </QuickViewProvider>
+        <CookieConsent />
+
         </StoreProvider>
       </body>
     </html>
