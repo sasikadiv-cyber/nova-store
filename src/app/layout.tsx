@@ -62,7 +62,14 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const appearance = await getAppearance();
   return (
-    <html lang="en" className={`${cormorant.variable} ${inter.variable}`}>
+    <html
+      lang="en"
+      className={`${cormorant.variable} ${inter.variable}`}
+      // The theme boot script may set data-theme on <html> before React
+      // hydrates (and browser extensions can add attributes here). Suppress
+      // the resulting benign one-level attribute mismatch.
+      suppressHydrationWarning
+    >
       <head>
         {/* Applies the stored theme before first paint so there is no flash.
             data-theme is never managed by React, so hydration stays clean. */}
