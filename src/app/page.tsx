@@ -172,11 +172,10 @@ export default async function HomePage() {
       </section>
 
       {/* -------------------------------------------------- seasonal offer */}
-      {/* Sits below the hero in normal flow. Extra top margin keeps the card
-          clear of the hero content; the bottom stays flush with the next
-          section, so only the top is adjusted. */}
+      {/* Sits below the hero in normal flow — the hero's own bottom padding
+          provides the breathing room, so the card never overlaps the hero. */}
       {appearance.promo_enabled === "true" && (
-        <section className="mt-48 border-y border-sand bg-linen md:mt-72">
+        <section className="border-y border-sand bg-linen">
           <div className="mx-auto grid w-full max-w-[1600px] items-stretch gap-0 lg:grid-cols-2">
             <div className="relative min-h-[240px] overflow-hidden bg-bone-dark lg:min-h-[420px]">
               {appearance.promo_image && (

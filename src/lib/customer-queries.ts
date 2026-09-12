@@ -17,7 +17,6 @@ import {
   type Review,
 } from "@/db/schema";
 import { hashPassword } from "./customer-auth";
-import { withDbRetry } from "./db-retry";
 import { DEMO_CUSTOMER } from "./demo-account";
 
 export const ORDER_FLOW = [
@@ -49,24 +48,20 @@ export type CustomerOrder = {
 
 /** Orders belonging to one customer, newest first, with items and events. */
 export async function getCustomerOrders(customerId: number): Promise<CustomerOrder[]> {
-  const rows = await withDbRetry(() =>
-    db
-      .select()
-      .from(orders)
-      .where(eq(orders.customerId, customerId))
-      .orderBy(desc(orders.createdAt))
-      .limit(60),
-  );
+  const rows = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.customerId, customerId))
+    .orderBy(desc(orders.createdAt))
+    .limit(60);
 
   if (rows.length === 0) return [];
 
   const ids = rows.map((row) => row.id);
-  const [items, events] = await withDbRetry(() =>
-    Promise.all([
-      db.select().from(orderItems).where(inArray(orderItems.orderId, ids)),
-      db.select().from(orderEvents).where(inArray(orderEvents.orderId, ids)).orderBy(orderEvents.createdAt),
-    ]),
-  );
+  const [items, events] = await Promise.all([
+    db.select().from(orderItems).where(inArray(orderItems.orderId, ids)),
+    db.select().from(orderEvents).where(inArray(orderEvents.orderId, ids)).orderBy(orderEvents.createdAt),
+  ]);
 
   return rows.map((order) => ({
     order,
@@ -79,13 +74,11 @@ export async function getCustomerOrder(
   customerId: number,
   orderId: number,
 ): Promise<CustomerOrder | null> {
-  const [order] = await withDbRetry(() =>
-    db
-      .select()
-      .from(orders)
-      .where(and(eq(orders.id, orderId), eq(orders.customerId, customerId)))
-      .limit(1),
-  );
+  const [order] = await db
+    .select()
+    .from(orders)
+    .where(and(eq(orders.id, orderId), eq(orders.customerId, customerId)))
+    .limit(1);
   if (!order) return null;
 
   const [items, events] = await Promise.all([

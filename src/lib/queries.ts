@@ -13,7 +13,6 @@ import {
 import { evaluateDiscount, recordRedemption } from "./discounts";
 import { decrementStock } from "./variants";
 import { seedDatabase } from "./seed";
-import { withDbRetry } from "./db-retry";
 
 export type SortKey = "featured" | "newest" | "price-asc" | "price-desc" | "rating" | "best-selling";
 
@@ -143,53 +142,43 @@ export async function getProducts(filters: ProductFilters = {}): Promise<Product
     }
   })();
 
-  return withDbRetry(() =>
-    db
-      .select()
-      .from(products)
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(...orderBy),
-  );
+  return db
+    .select()
+    .from(products)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(...orderBy);
 }
 
 export async function getProductBySlug(slug: string) {
   await ensureSeeded();
-  const [product] = await withDbRetry(() =>
-    db.select().from(products).where(eq(products.slug, slug)).limit(1),
-  );
+  const [product] = await db.select().from(products).where(eq(products.slug, slug)).limit(1);
   return product ?? null;
 }
 
 export async function getProductReviews(productId: number) {
-  return withDbRetry(() =>
-    db
-      .select()
-      .from(reviews)
-      .where(eq(reviews.productId, productId))
-      .orderBy(desc(reviews.createdAt)),
-  );
+  return db
+    .select()
+    .from(reviews)
+    .where(eq(reviews.productId, productId))
+    .orderBy(desc(reviews.createdAt));
 }
 
 export async function getRelatedProducts(product: Product, limit = 4) {
-  const rows = await withDbRetry(() =>
-    db
-      .select()
-      .from(products)
-      .where(and(eq(products.category, product.category), sql`${products.id} <> ${product.id}`))
-      .orderBy(desc(products.rating))
-      .limit(limit),
-  );
+  const rows = await db
+    .select()
+    .from(products)
+    .where(and(eq(products.category, product.category), sql`${products.id} <> ${product.id}`))
+    .orderBy(desc(products.rating))
+    .limit(limit);
 
   if (rows.length >= limit) return rows;
 
-  const fallback = await withDbRetry(() =>
-    db
-      .select()
-      .from(products)
-      .where(sql`${products.id} <> ${product.id}`)
-      .orderBy(desc(products.isBestSeller))
-      .limit(limit),
-  );
+  const fallback = await db
+    .select()
+    .from(products)
+    .where(sql`${products.id} <> ${product.id}`)
+    .orderBy(desc(products.isBestSeller))
+    .limit(limit);
 
   const seen = new Set(rows.map((row) => row.id));
   for (const row of fallback) {
@@ -204,29 +193,25 @@ export async function getRelatedProducts(product: Product, limit = 4) {
 
 export async function getCollections() {
   await ensureSeeded();
-  return withDbRetry(() => db.select().from(collections).orderBy(asc(collections.sortOrder)));
+  return db.select().from(collections).orderBy(asc(collections.sortOrder));
 }
 
 export async function getCollectionBySlug(slug: string) {
-  const [row] = await withDbRetry(() =>
-    db.select().from(collections).where(eq(collections.slug, slug)).limit(1),
-  );
+  const [row] = await db.select().from(collections).where(eq(collections.slug, slug)).limit(1);
   return row ?? null;
 }
 
 export async function getFacets(): Promise<Facets> {
   await ensureSeeded();
-  const rows = await withDbRetry(() =>
-    db
-      .select({
-        category: products.category,
-        gender: products.gender,
-        sizes: products.sizes,
-        colors: products.colors,
-        priceCents: products.priceCents,
-      })
-      .from(products),
-  );
+  const rows = await db
+    .select({
+      category: products.category,
+      gender: products.gender,
+      sizes: products.sizes,
+      colors: products.colors,
+      priceCents: products.priceCents,
+    })
+    .from(products);
 
   const categories = new Map<string, number>();
   const genders = new Map<string, number>();
@@ -265,51 +250,43 @@ export async function getFacets(): Promise<Facets> {
 
 export async function getFeatured(limit = 8) {
   await ensureSeeded();
-  return withDbRetry(() =>
-    db
-      .select()
-      .from(products)
-      .where(eq(products.isFeatured, true))
-      .orderBy(desc(products.rating))
-      .limit(limit),
-  );
+  return db
+    .select()
+    .from(products)
+    .where(eq(products.isFeatured, true))
+    .orderBy(desc(products.rating))
+    .limit(limit);
 }
 
 export async function getNewArrivals(limit = 8) {
   await ensureSeeded();
-  return withDbRetry(() =>
-    db
-      .select()
-      .from(products)
-      .where(eq(products.isNewArrival, true))
-      .orderBy(desc(products.createdAt))
-      .limit(limit),
-  );
+  return db
+    .select()
+    .from(products)
+    .where(eq(products.isNewArrival, true))
+    .orderBy(desc(products.createdAt))
+    .limit(limit);
 }
 
 export async function getBestSellers(limit = 8) {
   await ensureSeeded();
-  return withDbRetry(() =>
-    db
-      .select()
-      .from(products)
-      .where(eq(products.isBestSeller, true))
-      .orderBy(desc(products.reviewCount))
-      .limit(limit),
-  );
+  return db
+    .select()
+    .from(products)
+    .where(eq(products.isBestSeller, true))
+    .orderBy(desc(products.reviewCount))
+    .limit(limit);
 }
 
 export async function getStorefrontStats() {
   await ensureSeeded();
-  const [row] = await withDbRetry(() =>
-    db
-      .select({
-        products: sql<number>`cast(count(*) as int)`,
-        reviews: sql<number>`cast((select count(*) from ${reviews}) as int)`,
-        avgRating: sql<number>`cast(coalesce(avg(${products.rating}), 5) as float)`,
-      })
-      .from(products),
-  );
+  const [row] = await db
+    .select({
+      products: sql<number>`cast(count(*) as int)`,
+      reviews: sql<number>`cast((select count(*) from ${reviews}) as int)`,
+      avgRating: sql<number>`cast(coalesce(avg(${products.rating}), 5) as float)`,
+    })
+    .from(products);
   return row ?? { products: 0, reviews: 0, avgRating: 5 };
 }
 
