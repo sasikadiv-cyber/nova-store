@@ -65,9 +65,17 @@ export function CookieConsent() {
   const [analytics, setAnalytics] = useState(false);
   const [marketing, setMarketing] = useState(false);
 
-  /* Shown on every visit, so the visitor can always revisit their choice —
-     the saved preference simply pre-ticks the boxes they last picked. */
+  /* Greets the visitor once per browser session — a reload does not repeat
+     it, but closing the tab and returning does. Their last choice pre-ticks
+     the boxes, and the footer link reopens it any time. */
   useEffect(() => {
+    try {
+      if (window.sessionStorage.getItem("nova.consent.shown") === "1") return;
+      window.sessionStorage.setItem("nova.consent.shown", "1");
+    } catch {
+      /* storage unavailable — still show the bar */
+    }
+
     const previous = readConsent();
     setAnalytics(previous?.analytics ?? false);
     setMarketing(previous?.marketing ?? false);

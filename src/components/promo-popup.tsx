@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+
+const SESSION_KEY = "nova.popup.greeted";
 
 export type PromoPopupContent = {
   eyebrow: string;
@@ -15,40 +18,57 @@ export type PromoPopupContent = {
 };
 
 /**
- * Premium welcome card, shown once per visit.
+ * The welcome card, shown once per browser session and only on the home page.
  *
- * Dismissal is remembered in local storage so returning clients are never
- * interrupted twice. ESC closes it, and the backdrop is click-through-safe
- * because the whole surface is dismissible.
+ * The marker lives in session storage, so a reload does not repeat the
+ * greeting but closing the tab and returning does. It also waits for the
+ * visitor's cookie choice rather than stacking on top of the banner.
  */
 export function PromoPopup({ content }: { content: PromoPopupContent }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   function close() {
-    /* Not remembered — the card greets the client on every visit. */
+    /* The session marker already covers this visit, so nothing to store. */
     setOpen(false);
   }
+
+  const pathname = usePathname();
 
   useEffect(() => {
     let timer: number | undefined;
     let onConsent: (() => void) | null = null;
+
+    /* Greeting belongs to the home page only. */
+    if (pathname !== "/") {
+      setOpen(false);
+      return;
+    }
+
+    /* Once per browser session — a reload must not repeat it, but a fresh
+       visit after closing the tab should be greeted again. */
+    try {
+      if (window.sessionStorage.getItem(SESSION_KEY) === "1") return;
+      window.sessionStorage.setItem(SESSION_KEY, "1");
+    } catch {
+      /* storage unavailable — still greet */
+    }
 
     const seconds = Math.max(0, Number(content.delay) || 0);
     const arm = () => {
       timer = window.setTimeout(() => setOpen(true), seconds * 1000);
     };
 
-    /* Never stack the welcome card on the cookie bar — the choice comes
-       first, then the greeting, then the delay the owner configured. */
-    let awaitingChoice = false;
+    /* Never stack the card on the cookie bar: if the bar is going to appear
+       this session, the choice comes first and the greeting follows it. */
+    let bannerWillShow = false;
     try {
-      awaitingChoice = window.localStorage.getItem("nova.consent") === null;
+      bannerWillShow = window.sessionStorage.getItem("nova.consent.shown") !== "1";
     } catch {
-      awaitingChoice = false;
+      bannerWillShow = false;
     }
 
-    if (awaitingChoice) {
+    if (bannerWillShow) {
       onConsent = arm;
       window.addEventListener("nova:consent-decided", onConsent);
     } else {
@@ -59,7 +79,7 @@ export function PromoPopup({ content }: { content: PromoPopupContent }) {
       if (timer !== undefined) window.clearTimeout(timer);
       if (onConsent) window.removeEventListener("nova:consent-decided", onConsent);
     };
-  }, [content.delay]);
+  }, [content.delay, pathname]);
 
   useEffect(() => {
     if (!open) return;
@@ -88,7 +108,7 @@ export function PromoPopup({ content }: { content: PromoPopupContent }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[140] flex items-end justify-center sm:items-center">
+    <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 sm:p-6">
       <div
         onClick={close}
         className="animate-overlay-in absolute inset-0 bg-ink/60 backdrop-blur-[3px]"
@@ -98,7 +118,7 @@ export function PromoPopup({ content }: { content: PromoPopupContent }) {
         role="dialog"
         aria-modal="true"
         aria-label={content.title}
-        className="animate-modal-in relative z-10 flex max-h-[92svh] w-full max-w-[880px] flex-col overflow-hidden bg-bone shadow-lift sm:max-h-[86svh] sm:flex-row"
+        className="animate-modal-in relative z-10 flex max-h-[88svh] w-full max-w-[520px] flex-col overflow-hidden bg-bone shadow-lift sm:max-h-[86svh] sm:max-w-[880px] sm:flex-row"
       >
         <button
           type="button"
