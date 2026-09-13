@@ -375,8 +375,8 @@ export function PurchasePanel({
       </div>
 
       {/* quantity + add */}
-      <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-        <div className="flex items-center justify-between border border-ink/15 sm:w-[132px]">
+      <div className="mt-8 flex min-w-0 flex-col gap-3 min-[400px]:flex-row">
+        <div className="flex w-full items-center justify-between border border-ink/15 sm:w-[132px]">
           <button
             type="button"
             onClick={() => setQuantity((value) => Math.max(1, value - 1))}
@@ -440,12 +440,12 @@ export function PurchasePanel({
                 showBar ? "translate-y-0" : "translate-y-full"
               }`}
             >
-              <div className="mx-auto flex w-full max-w-[1600px] items-center gap-4 px-4 py-3 md:px-10">
+              <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-3 px-3 py-3 min-[360px]:px-4 md:flex-nowrap md:px-10">
                 <div className="relative hidden h-14 w-11 shrink-0 overflow-hidden bg-bone-dark sm:block">
                   <Image src={product.images[0]} alt="" fill sizes="44px" className="object-cover" />
                 </div>
 
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 basis-full min-[420px]:basis-auto">
                   <p className="truncate text-[13.5px] leading-tight">{product.name}</p>
                   <p className="mt-0.5 text-[11px] uppercase tracking-[0.12em] text-ink-300">
                     {color?.name ?? ""}
@@ -460,7 +460,7 @@ export function PurchasePanel({
                 <button
                   type="button"
                   onClick={onAdd}
-                  className={`shrink-0 px-6 py-3 text-[11px] font-medium uppercase tracking-[0.18em] transition-colors duration-500 ${
+                  className={`flex-1 shrink-0 px-6 py-3 text-[11px] font-medium uppercase tracking-[0.18em] transition-colors duration-500 min-[420px]:flex-none ${
                     added ? "bg-brass text-ink" : "bg-ink text-bone hover:bg-ink-700"
                   }`}
                 >

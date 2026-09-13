@@ -115,7 +115,7 @@ export default async function HomePage() {
           </div>
 
           <div className="mt-14 flex flex-col gap-8 border-t border-ivory/15 pt-7 lg:flex-row lg:items-end lg:justify-between">
-            <dl className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-4 lg:gap-x-12">
+            <dl className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-x-6 gap-y-7 min-[360px]:gap-x-8 sm:grid-cols-4 lg:gap-x-12">
               {[
                 { value: 94, decimals: 0, label: "Countries served" },
                 { value: stats.products, decimals: 0, label: "Pieces in season" },
@@ -127,7 +127,7 @@ export default async function HomePage() {
                   className="animate-fade-up"
                   style={{ animationDelay: `${420 + index * 90}ms` }}
                 >
-                  <dt className="font-display text-[34px] leading-none md:text-4xl">
+                  <dt className="font-display text-[clamp(1.75rem,8vw,2.25rem)] leading-none md:text-4xl">
                     <CountUp value={item.value} decimals={item.decimals} />
                   </dt>
                   <dd className="eyebrow mt-2.5 text-[9.5px] text-ivory/55">{item.label}</dd>

@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-const DISMISS_KEY = "nova.popup.dismissed";
-
 export type PromoPopupContent = {
   eyebrow: string;
   title: string;
@@ -28,24 +26,39 @@ export function PromoPopup({ content }: { content: PromoPopupContent }) {
   const [copied, setCopied] = useState(false);
 
   function close() {
+    /* Not remembered — the card greets the client on every visit. */
     setOpen(false);
-    try {
-      window.localStorage.setItem(DISMISS_KEY, "1");
-    } catch {
-      /* ignore */
-    }
   }
 
   useEffect(() => {
-    try {
-      if (window.localStorage.getItem(DISMISS_KEY) === "1") return;
-    } catch {
-      /* storage unavailable — still show the card */
-    }
+    let timer: number | undefined;
+    let onConsent: (() => void) | null = null;
 
     const seconds = Math.max(0, Number(content.delay) || 0);
-    const timer = window.setTimeout(() => setOpen(true), seconds * 1000);
-    return () => window.clearTimeout(timer);
+    const arm = () => {
+      timer = window.setTimeout(() => setOpen(true), seconds * 1000);
+    };
+
+    /* Never stack the welcome card on the cookie bar — the choice comes
+       first, then the greeting, then the delay the owner configured. */
+    let awaitingChoice = false;
+    try {
+      awaitingChoice = window.localStorage.getItem("nova.consent") === null;
+    } catch {
+      awaitingChoice = false;
+    }
+
+    if (awaitingChoice) {
+      onConsent = arm;
+      window.addEventListener("nova:consent-decided", onConsent);
+    } else {
+      arm();
+    }
+
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      if (onConsent) window.removeEventListener("nova:consent-decided", onConsent);
+    };
   }, [content.delay]);
 
   useEffect(() => {
@@ -155,7 +168,7 @@ export function PromoPopup({ content }: { content: PromoPopupContent }) {
           </div>
 
           <p className="mt-2 text-[11px] leading-relaxed text-ink-300">
-            Shown once per visit. Join the list any time from the footer.
+            Join the list any time from the footer.
           </p>
         </div>
       </div>

@@ -94,8 +94,8 @@ export default async function ProductPage({ params }: PageProps) {
           <span className="text-ink-500">{product.name}</span>
         </nav>
 
-        <div className="mt-8 grid gap-10 lg:grid-cols-12 lg:gap-16">
-          <div className="lg:col-span-7">
+        <div className="mt-6 grid min-w-0 gap-10 min-[360px]:mt-8 lg:grid-cols-12 lg:gap-16">
+          <div className="min-w-0 lg:col-span-7">
             <ProductGallery
               images={product.images}
               labels={product.imageLabels ?? []}
@@ -103,7 +103,7 @@ export default async function ProductPage({ params }: PageProps) {
             />
           </div>
 
-          <div className="lg:col-span-5">
+          <div className="min-w-0 lg:col-span-5">
             <div className="lg:sticky lg:top-[96px]">
               <p className="eyebrow text-ink-300">
                 {product.badge ? `${product.badge} · ` : ""}
@@ -121,7 +121,7 @@ export default async function ProductPage({ params }: PageProps) {
 
       {/* ------------------------------------------------------------- story */}
       <section id="story" className="scroll-mt-24 border-y border-sand bg-bone-dark">
-        <div className="mx-auto grid w-full max-w-[1600px] items-center gap-12 px-5 py-16 md:px-10 md:py-24 lg:grid-cols-2 lg:gap-20">
+        <div className="mx-auto grid w-full max-w-[1600px] items-center gap-10 px-4 py-12 min-[360px]:px-5 md:px-10 md:py-24 lg:grid-cols-2 lg:gap-20">
           <Reveal>
             <p className="eyebrow text-ink-300">The making of it</p>
             <h2 className="mt-4 text-[clamp(1.9rem,3.4vw,2.9rem)] leading-[1.08]">{product.story}</h2>
@@ -186,7 +186,7 @@ export default async function ProductPage({ params }: PageProps) {
               </p>
             </div>
 
-            <div className="mt-10 grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-4">
+            <div className="mt-10 grid min-w-0 grid-cols-2 gap-x-4 gap-y-10 min-[360px]:gap-x-5 lg:grid-cols-4">
               {look.map((item, index) => (
                 <Reveal key={item.id} delay={index * 90}>
                   <ProductCard product={item} compact />
@@ -213,7 +213,7 @@ export default async function ProductPage({ params }: PageProps) {
             </Link>
           </Reveal>
 
-          <div className="mt-12 grid grid-cols-2 gap-x-5 gap-y-12 lg:grid-cols-4">
+          <div className="mt-12 grid min-w-0 grid-cols-2 gap-x-4 gap-y-12 min-[360px]:gap-x-5 lg:grid-cols-4">
             {related.map((item, index) => (
               <Reveal key={item.id} delay={index * 90}>
                 <ProductCard product={item} compact />

@@ -65,13 +65,16 @@ export function CookieConsent() {
   const [analytics, setAnalytics] = useState(false);
   const [marketing, setMarketing] = useState(false);
 
-  /* Appears once, on the first visit, and again whenever the visitor asks to
-     review their choices from the footer. */
+  /* Shown on every visit, so the visitor can always revisit their choice —
+     the saved preference simply pre-ticks the boxes they last picked. */
   useEffect(() => {
-    if (!readConsent()) setOpen(true);
+    const previous = readConsent();
+    setAnalytics(previous?.analytics ?? false);
+    setMarketing(previous?.marketing ?? false);
+    setCustomize(false);
+    setOpen(true);
+
     const reopen = () => {
-      setAnalytics(false);
-      setMarketing(false);
       setCustomize(false);
       setOpen(true);
     };
@@ -84,6 +87,8 @@ export function CookieConsent() {
   function decide(choice: { analytics: boolean; marketing: boolean }) {
     saveConsent(choice);
     setOpen(false);
+    /* Lets the welcome card know it may appear now. */
+    window.dispatchEvent(new CustomEvent("nova:consent-decided"));
   }
 
   return (

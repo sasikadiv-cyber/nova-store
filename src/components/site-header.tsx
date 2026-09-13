@@ -130,7 +130,7 @@ export function SiteHeader({
             : "border-b border-ink/10 bg-bone/90 text-ink backdrop-blur-xl"
         }`}
       >
-        <div className="mx-auto grid h-[68px] w-full max-w-[1600px] grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:gap-4 md:h-[76px] md:px-10">
+        <div className="mx-auto grid h-[60px] w-full max-w-[1600px] grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 min-[360px]:h-[68px] min-[360px]:gap-3 min-[360px]:px-4 sm:gap-4 md:h-[76px] md:px-10">
           {/* ------------------------------------------------------- left */}
           <div className="flex min-w-0 items-center gap-6">
             <button
@@ -234,7 +234,7 @@ export function SiteHeader({
 
           {/* ------------------------------------------------------ centre */}
           <Link href="/" aria-label="Nova home" className="flex items-center leading-none">
-            <span className="font-display text-[19px] tracking-[0.26em] sm:text-[23px] sm:tracking-[0.3em] md:text-[27px] md:tracking-[0.34em]">
+            <span className="font-display text-[16px] tracking-[0.2em] min-[360px]:text-[19px] min-[360px]:tracking-[0.26em] sm:text-[23px] sm:tracking-[0.3em] md:text-[27px] md:tracking-[0.34em]">
               NOVA
             </span>
           </Link>
@@ -264,7 +264,7 @@ export function SiteHeader({
               type="button"
               onClick={() => setSearchOpen((value) => !value)}
               aria-label="Search"
-              className="grid h-10 w-10 place-items-center transition-opacity hover:opacity-60"
+              className="hidden h-10 w-10 place-items-center transition-opacity hover:opacity-60 md:grid"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" fill="none">
                 <circle cx="11" cy="11" r="7" />
@@ -277,7 +277,7 @@ export function SiteHeader({
               onClick={toggleTheme}
               aria-label="Toggle light and dark theme"
               title="Toggle light and dark theme"
-              className="grid h-10 w-10 place-items-center transition-opacity hover:opacity-60"
+              className="hidden h-10 w-10 place-items-center transition-opacity hover:opacity-60 md:grid"
             >
               <svg
                 width="18"
@@ -341,28 +341,28 @@ export function SiteHeader({
           }`}
         />
         <div
-          className={`absolute left-0 top-0 h-full w-[86%] max-w-[380px] overflow-y-auto bg-bone px-6 py-7 text-ink transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          className={`absolute left-0 top-0 h-full w-[88%] max-w-[360px] overflow-y-auto bg-bone px-5 py-6 text-ink transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] min-[360px]:px-6 ${
             menuOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="font-display text-xl tracking-[0.3em]">NOVA</span>
+            <span className="font-display text-lg tracking-[0.28em]">NOVA</span>
             <button
               type="button"
               onClick={() => setMenuOpen(false)}
               aria-label="Close menu"
-              className="grid h-10 w-10 place-items-center rounded-full border border-ink/15"
+              className="grid h-9 w-9 place-items-center rounded-full border border-ink/15"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.6" fill="none">
+              <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.6" fill="none">
                 <path d="M5 5l14 14M19 5L5 19" />
               </svg>
             </button>
           </div>
 
-          <nav className="mt-9 flex flex-col">
+          {/* --------------------------------------------------- main links */}
+          <nav className="mt-7 flex flex-col">
             {[
               { href: "/", label: nav.home },
-              { href: "/account", label: nav.myAccount },
               { href: "/shop", label: nav.shopAll },
               ...AUDIENCE_LINKS,
               { href: NAV_LINKS[0].href, label: nav.footwear },
@@ -371,36 +371,102 @@ export function SiteHeader({
               <Link
                 key={link.href + link.label}
                 href={link.href}
-                className="border-b border-ink/8 py-4 font-display text-[26px] leading-none"
+                onClick={() => setMenuOpen(false)}
+                className="border-b border-ink/8 py-3 text-[14.5px] leading-tight transition-colors hover:text-brass"
               >
                 {link.label}
               </Link>
             ))}
           </nav>
 
-          <p className="eyebrow mt-9 text-ink-300">Collections</p>
-          <div className="mt-3 flex flex-col gap-3">
+          {/* -------------------------------------------------- collections */}
+          <p className="eyebrow mt-7 text-ink-300">Collections</p>
+          <div className="mt-2 flex flex-col">
             {COLLECTION_LINKS.map((collection) => (
               <Link
                 key={collection.href}
                 href={collection.href}
-                className="flex items-baseline justify-between gap-3 text-[13.5px]"
+                onClick={() => setMenuOpen(false)}
+                className="border-b border-ink/8 py-2.5 text-[13.5px] leading-tight text-ink-500 transition-colors hover:text-ink"
               >
-                <span>{collection.label}</span>
-                <span className="shrink-0 text-[11.5px] text-ink-300">{collection.tagline}</span>
+                {collection.label}
               </Link>
             ))}
           </div>
 
-          <div className="mt-9">
+          {/* ------------------------------------------- account & settings */}
+          <p className="eyebrow mt-7 text-ink-300">Account</p>
+          <div className="mt-2 flex flex-col">
+            <Link
+              href="/account"
+              onClick={() => setMenuOpen(false)}
+              className="border-b border-ink/8 py-2.5 text-[13.5px] text-ink-500 transition-colors hover:text-ink"
+            >
+              {nav.myAccount}
+            </Link>
+            <Link
+              href="/account/orders"
+              onClick={() => setMenuOpen(false)}
+              className="border-b border-ink/8 py-2.5 text-[13.5px] text-ink-500 transition-colors hover:text-ink"
+            >
+              Track an order
+            </Link>
+            <Link
+              href="/help"
+              onClick={() => setMenuOpen(false)}
+              className="border-b border-ink/8 py-2.5 text-[13.5px] text-ink-500 transition-colors hover:text-ink"
+            >
+              Help centre
+            </Link>
+          </div>
+
+          {/* ---------------------------------------------- theme + currency */}
+          <div className="mt-7 flex items-center justify-between border-y border-ink/8 py-4">
+            <span className="text-[13px] text-ink-500">Appearance</span>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label="Toggle light and dark theme"
+              className="inline-flex items-center gap-2 border border-ink/15 px-3 py-1.5 text-[11.5px] uppercase tracking-[0.14em] text-ink-500 transition-colors hover:border-ink hover:text-ink"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                className="icon-moon"
+                aria-hidden="true"
+              >
+                <path d="M20.5 14.2A8.6 8.6 0 1 1 9.8 3.5a6.9 6.9 0 0 0 10.7 10.7z" />
+              </svg>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                className="icon-sun"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="4.1" />
+                <path d="M12 2.7v2.2M12 19.1v2.2M2.7 12h2.2M19.1 12h2.2M5.5 5.5l1.6 1.6M16.9 16.9l1.6 1.6M18.5 5.5l-1.6 1.6M7.1 16.9l-1.6 1.6" />
+              </svg>
+              Theme
+            </button>
+          </div>
+
+          <div className="mt-5">
             <p className="eyebrow text-ink-300">Currency</p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               {CURRENCY_LIST.map((item) => (
                 <button
                   key={item.code}
                   type="button"
                   onClick={() => setCurrency(item.code)}
-                  className={`border px-3 py-1.5 text-[11.5px] tracking-[0.1em] transition-colors ${
+                  className={`border px-2.5 py-1.5 text-[11px] tracking-[0.1em] transition-colors ${
                     currency === item.code
                       ? "border-ink bg-ink text-bone"
                       : "border-ink/15 text-ink-300 hover:border-ink/40"
@@ -539,7 +605,7 @@ function AccountMenu({
         aria-label="My account"
         aria-expanded={open}
         title="My account"
-        className="grid h-10 w-10 place-items-center transition-opacity hover:opacity-60"
+        className="hidden h-10 w-10 place-items-center transition-opacity hover:opacity-60 md:grid"
       >
         {customer ? (
           <span className="grid h-7 w-7 place-items-center rounded-full bg-ink text-[11px] font-medium tracking-[0.06em] text-bone">

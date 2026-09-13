@@ -380,3 +380,50 @@ html[data-theme="dark"] .skeleton {
 .stock-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--color-ink-300);
 }
+
+/* ----------------------------------------------- very narrow phones (300px+) */
+/* Keeps the storefront usable on the smallest devices without horizontal
+   scrolling: tighter gutters, smaller display type, smaller controls. */
+@media (max-width: 359px) {
+  html {
+    font-size: 15px;
+  }
+
+  /* Tighter page gutters on the narrowest screens. */
+  .max-w-\[1600px\],
+  .max-w-\[1400px\],
+  .max-w-\[1320px\],
+  .max-w-\[1100px\] {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  /* Headline display type scales down rather than overflowing. */
+  h1 {
+    font-size: clamp(1.9rem, 9vw, 2.6rem) !important;
+    word-break: break-word;
+  }
+
+  /* Two-up product grids collapse to a single column. */
+  .grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Filter chips and tags wrap instead of forcing width. */
+  .flex-wrap {
+    min-width: 0;
+  }
+
+  /* Buttons keep a comfortable tap target without widening layouts. */
+  button,
+  a {
+    max-width: 100%;
+  }
+
+  /* Prevent long words (slugs, emails) from pushing out. */
+  p,
+  span,
+  li {
+    overflow-wrap: anywhere;
+  }
+}
