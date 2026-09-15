@@ -57,20 +57,34 @@ export default async function HomePage() {
       {/* ------------------------------------------------------------- hero */}
       <section className="relative -mt-[68px] flex min-h-[92svh] items-end overflow-hidden bg-band pt-[68px] md:-mt-[76px] md:pt-[76px]">
         <div className="absolute inset-0">
-          <video
-            className="animate-fade-in h-full w-full object-cover"
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            poster={appearance.hero_poster}
-            disablePictureInPicture
-            aria-hidden="true"
-            tabIndex={-1}
-          >
-            <source src={appearance.hero_video} type="video/mp4" />
-          </video>
+          {/* The poster is the largest element in the viewport, so it is the
+              LCP candidate: served through the image optimizer with priority.
+              The film sits on top of it and only downloads once the paint is
+              done, so the two never compete for bandwidth. */}
+          <Image
+            src={appearance.hero_poster}
+            alt=""
+            fill
+            priority
+            fetchPriority="high"
+            sizes="100vw"
+            className="object-cover"
+          />
+          {appearance.hero_video && (
+            <video
+              className="absolute inset-0 h-full w-full object-cover"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="none"
+              disablePictureInPicture
+              aria-hidden="true"
+              tabIndex={-1}
+            >
+              <source src={appearance.hero_video} type="video/mp4" />
+            </video>
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-band/92 via-band/45 to-band/60" />
         </div>
 
@@ -334,20 +348,30 @@ export default async function HomePage() {
         <div className="mx-auto grid w-full max-w-[1600px] items-center gap-12 px-5 md:px-10 lg:grid-cols-2 lg:gap-20">
           <Reveal className="relative pb-14 md:pb-16">
             <div className="relative aspect-4/5 w-full overflow-hidden bg-bone-dark">
-              <video
-                className="h-full w-full object-cover"
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                poster={appearance.atelier_poster}
-                disablePictureInPicture
-                aria-hidden="true"
-                tabIndex={-1}
-              >
-                <source src={appearance.atelier_video} type="video/mp4" />
-              </video>
+              {/* Optimised still first — the film only downloads when the
+                  owner has configured one, so nothing is fetched twice. */}
+              <Image
+                src={appearance.atelier_poster}
+                alt="Inside the Nova atelier"
+                fill
+                sizes="(max-width: 1024px) 100vw, 50vw"
+                className="object-cover"
+              />
+              {appearance.atelier_video && (
+                <video
+                  className="absolute inset-0 h-full w-full object-cover"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="none"
+                  disablePictureInPicture
+                  aria-hidden="true"
+                  tabIndex={-1}
+                >
+                  <source src={appearance.atelier_video} type="video/mp4" />
+                </video>
+              )}
             </div>
             <div className="absolute bottom-0 right-0 w-[42%] overflow-hidden border-[10px] border-bone-dark shadow-lift">
               <div className="relative aspect-3/4">
