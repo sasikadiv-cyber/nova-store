@@ -97,7 +97,7 @@ export type SettingDefinition = {
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
   /* ------------------------------------------------------------- hero */
   { key: "hero_video", group: "hero", label: "Hero video (mp4)", help: "The looping background film behind the home page headline.", kind: "video", default: "" },
-  { key: "hero_poster", group: "hero", label: "Hero poster image", help: "Shown while the video loads, and if it cannot play.", kind: "image", default: "/videos/hero-poster.jpg" },
+  { key: "hero_poster", group: "hero", label: "Hero poster image", help: "Shown while the video loads, and if it cannot play.", kind: "image", default: "https://images.pexels.com/photos/14641430/pexels-photo-14641430.jpeg?auto=compress&cs=tinysrgb&fit=crop&w=1920&h=1080" },
   { key: "hero_eyebrow", group: "hero", label: "Hero eyebrow", help: "The small letterspaced label above the headline.", kind: "text", default: "Autumn — Winter 2026 · Global Edition" },
   { key: "hero_heading_line1", group: "hero", label: "Headline line 1", help: "The first line of the large headline.", kind: "text", default: "Quiet luxury," },
   { key: "hero_heading_line2", group: "hero", label: "Headline line 2 (italic)", help: "The second line, rendered in italic with the accent colour.", kind: "text", default: "made to travel." },
@@ -109,7 +109,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
 
   /* --------------------------------------------------------- editorial */
   { key: "atelier_video", group: "hero", label: "Story video (mp4)", help: "The film inside the “Nova method” editorial block.", kind: "video", default: "" },
-  { key: "atelier_poster", group: "hero", label: "Story poster image", help: "Shown while that video loads.", kind: "image", default: "/videos/atelier-poster.jpg" },
+  { key: "atelier_poster", group: "hero", label: "Story poster image", help: "Shown while that video loads.", kind: "image", default: "https://images.pexels.com/photos/32366927/pexels-photo-32366927.jpeg?auto=compress&cs=tinysrgb&fit=crop&w=1200&h=1500" },
   { key: "editorial_image", group: "hero", label: "Editorial overlap image", help: "The framed still that overlaps the story video.", kind: "image", default: EDITORIAL_IMAGE_DEFAULT },
 
   /* -------------------------------------------------------------- nav */

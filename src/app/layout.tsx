@@ -21,7 +21,9 @@ const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
   variable: "--font-cormorant",
   display: "swap",
-  weight: ["300", "400", "500", "600"],
+  /* Only the weights the UI actually uses — every extra weight is another
+     font file the browser has to download before text can paint. */
+  weight: ["400", "500"],
   style: ["normal", "italic"],
 });
 
@@ -29,7 +31,9 @@ const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
   display: "swap",
-  weight: ["300", "400", "500", "600"],
+  /* Only the weights the UI actually uses — every extra weight is another
+     font file the browser has to download before text can paint. */
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
