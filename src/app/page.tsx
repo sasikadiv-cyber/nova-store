@@ -14,7 +14,11 @@ import {
   getStorefrontStats,
 } from "@/lib/queries";
 
-export const dynamic = "force-dynamic";
+/* Cached at the edge and revalidated every minute, and immediately when the
+   owner saves from the console (revalidatePath). This is what keeps the
+   first byte fast — the page no longer waits on the database for every
+   visitor. */
+export const revalidate = 60;
 
 /* Hero and editorial media come from Site appearance (admin → appearance),
    so the owner can swap films and copy without touching the code. */

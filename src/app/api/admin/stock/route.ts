@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 
-import { isAdmin } from "@/lib/auth";
+import { requireManager } from "@/lib/auth";
 import { ensureVariants, setVariantStock } from "@/lib/variants";
 
 export const dynamic = "force-dynamic";
 
 /** Updates one colour-and-size combination, then resyncs the product total. */
 export async function POST(request: Request) {
-  if (!(await isAdmin())) {
-    return NextResponse.json({ ok: false, error: "Shop owner access only." }, { status: 401 });
-  }
+  await requireManager();
 
   const origin = request.headers.get("origin");
   if (origin) {

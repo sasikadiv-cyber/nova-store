@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 
-import { isAdmin } from "@/lib/auth";
+import { requireManager } from "@/lib/auth";
 import { setVariantStock } from "@/lib/variants";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +13,7 @@ type Update = { productId: number; color: string; size: string; stock: number };
  * as many cells as they like and commit them together.
  */
 export async function POST(request: Request) {
-  if (!(await isAdmin())) {
-    return NextResponse.json({ ok: false, error: "Shop owner access only." }, { status: 401 });
-  }
+  await requireManager();
 
   const origin = request.headers.get("origin");
   if (origin) {

@@ -5,10 +5,14 @@ import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
 import { ProductGallery, PurchasePanel, ReviewsSection } from "@/components/product-detail";
 import { Reveal } from "@/components/ui";
+import { safeJsonLd } from "@/lib/security";
 import { getCompleteLook, getProductBySlug, getProductReviews, getRelatedProducts } from "@/lib/queries";
 import { ensureVariants, getVariants, toStockView } from "@/lib/variants";
 
-export const dynamic = "force-dynamic";
+/* Rendered once per product and cached at the edge; console saves call
+   revalidatePath so a price change appears straight away. */
+export const revalidate = 60;
+export const dynamicParams = true;
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -74,7 +78,7 @@ export default async function ProductPage({ params }: PageProps) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
       />
 
       <div className="mx-auto w-full max-w-[1600px] px-5 py-8 md:px-10 md:py-10">

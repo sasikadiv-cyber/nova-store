@@ -5,7 +5,8 @@ import { notFound } from "next/navigation";
 import { ContactForm } from "@/components/contact-form";
 import { ensureSitePagesSeeded, getSitePage } from "@/lib/site-pages";
 
-export const dynamic = "force-dynamic";
+/* Editorial copy rarely changes, so it is cached for longer. */
+export const revalidate = 300;
 
 type Params = { params: Promise<{ slug: string }> };
 

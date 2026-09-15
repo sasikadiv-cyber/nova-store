@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { db } from "@/db";
 import { siteSettings } from "@/db/schema";
 import { SETTING_DEFAULTS, type SettingKey, type SiteAppearance } from "./appearance-schema";
@@ -5,7 +7,7 @@ import { SETTING_DEFAULTS, type SettingKey, type SiteAppearance } from "./appear
 export * from "./appearance-schema";
 
 /** Reads every setting, falling back to the defaults for anything missing. */
-export async function getAppearance(): Promise<SiteAppearance> {
+async function readAppearance(): Promise<SiteAppearance> {
   const result: SiteAppearance = { ...SETTING_DEFAULTS };
   try {
     const rows = await db.select().from(siteSettings);
@@ -43,3 +45,6 @@ export async function saveAppearance(values: Partial<Record<SettingKey, string>>
 export async function resetAppearance() {
   await db.delete(siteSettings);
 }
+
+/** De-duplicated per render so the layout and page share one read. */
+export const getAppearance = cache(readAppearance);

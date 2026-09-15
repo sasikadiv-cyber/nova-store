@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { guard } from "@/lib/security";
+
 import { db } from "@/db";
 import { contactMessages } from "@/db/schema";
 
@@ -9,16 +11,8 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Stores a contact message for the console inbox. */
 export async function POST(request: Request) {
-  const origin = request.headers.get("origin");
-  if (origin) {
-    try {
-      if (new URL(origin).host !== request.headers.get("host")) {
-        return NextResponse.json({ ok: false, error: "Blocked." }, { status: 403 });
-      }
-    } catch {
-      return NextResponse.json({ ok: false, error: "Blocked." }, { status: 403 });
-    }
-  }
+  const blocked = guard(request, "contact", 5, 600);
+  if (blocked) return blocked;
 
   let payload: { name?: string; email?: string; subject?: string; message?: string };
   try {

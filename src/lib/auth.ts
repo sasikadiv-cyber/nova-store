@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
@@ -24,7 +24,32 @@ const MAX_AGE_SECONDS = 60 * 60 * 12;
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "owner@nova.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "nova-admin";
-const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "nova-atelier-signing-key-2026";
+
+/* The signing key must never be a publicly known constant, or anyone could
+   forge a session cookie. When the operator has not set ADMIN_SECRET we
+   derive one from this deployment's own database URL instead — unique per
+   deployment and unknowable without the database credentials. Setting
+   ADMIN_SECRET explicitly is still recommended. */
+function deriveSecret(scope: string) {
+  const seed = process.env.ADMIN_SECRET ?? process.env.DATABASE_URL ?? "";
+  if (!seed) return "";
+  return createHash("sha256").update(`nova:${scope}:${seed}`).digest("base64url");
+}
+
+const ADMIN_SECRET = process.env.ADMIN_SECRET ?? deriveSecret("admin");
+
+if (!ADMIN_SECRET) {
+  throw new Error(
+    "ADMIN_SECRET (or DATABASE_URL) must be set so console sessions can be signed.",
+  );
+}
+
+if (process.env.NODE_ENV === "production" && !process.env.ADMIN_SECRET) {
+  console.warn(
+    "[nova] ADMIN_SECRET is not set — deriving a signing key from DATABASE_URL. " +
+      "Set ADMIN_SECRET explicitly for a stable key across database migrations.",
+  );
+}
 
 export const OWNER_EMAIL = ADMIN_EMAIL;
 

@@ -1,6 +1,8 @@
 import { inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+import { guard } from "@/lib/security";
+
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import { evaluateDiscount } from "@/lib/discounts";
@@ -10,6 +12,9 @@ export const dynamic = "force-dynamic";
 
 /** Checks a code at checkout — first as a promo code, then as a gift card. */
 export async function POST(request: Request) {
+  const blocked = guard(request, "promo", 30, 60);
+  if (blocked) return blocked;
+
   let payload: { code?: string; items?: { slug?: string; quantity?: number }[] };
   try {
     payload = await request.json();

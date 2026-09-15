@@ -31,6 +31,7 @@ import {
   verifyAdminPassword,
   verifyCredentials,
 } from "@/lib/auth";
+import { invalidateCatalogue } from "@/lib/cache";
 import { generateGiftCardCode } from "@/lib/gift-cards";
 import { slugify } from "@/lib/product-form";
 import { ORDER_FLOW } from "@/lib/customer-queries";
@@ -69,6 +70,9 @@ function list(value: string) {
 
 function refreshStore() {
   revalidatePath("/", "layout");
+  /* Drop the tagged catalogue cache too, so the next storefront request reads
+     fresh data instead of waiting out the time-based expiry. */
+  invalidateCatalogue();
 }
 
 /* --------------------------------------------------------------------- auth */

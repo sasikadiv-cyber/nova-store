@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 
+import { guard } from "@/lib/security";
+
 import { createReview } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const blocked = guard(request, "review", 5, 3600);
+  if (blocked) return blocked;
+
   let payload: {
     slug?: string;
     author?: string;

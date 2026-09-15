@@ -1,5 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+
+import { guard } from "@/lib/security";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
@@ -19,16 +21,9 @@ export const dynamic = "force-dynamic";
  * independent of the build-time action registry.
  */
 export async function POST(request: Request) {
-  const origin = request.headers.get("origin");
-  if (origin) {
-    try {
-      if (new URL(origin).host !== request.headers.get("host")) {
-        return NextResponse.json({ ok: false, error: "Blocked." }, { status: 403 });
-      }
-    } catch {
-      return NextResponse.json({ ok: false, error: "Blocked." }, { status: 403 });
-    }
-  }
+  /* Sign-in is throttled: five attempts a minute per client. */
+  const blocked = guard(request, "signin", 5, 60);
+  if (blocked) return blocked;
 
   let payload: {
     mode?: string;

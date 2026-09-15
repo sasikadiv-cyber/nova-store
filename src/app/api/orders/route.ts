@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { guard } from "@/lib/security";
 import { revalidatePath } from "next/cache";
 
 import { createOrder, type ShippingMethodId } from "@/lib/queries";
@@ -24,6 +26,9 @@ type Payload = {
 const METHOD_IDS = ["standard", "express", "priority"];
 
 export async function POST(request: Request) {
+  const blocked = guard(request, "order", 12, 600);
+  if (blocked) return blocked;
+
   let payload: Payload;
   try {
     payload = (await request.json()) as Payload;

@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { asc } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -6,7 +8,7 @@ import { CURRENCIES, type CurrencyCode } from "./currency";
 import { DEFAULT_CURRENCY_RULES, type CurrencyRuleConfig, type CurrencyRuleMap } from "./currency-rules";
 
 /** Reads the owner's pricing rules, falling back to the built-in rates. */
-export async function getCurrencyRuleMap(): Promise<CurrencyRuleMap> {
+async function readCurrencyRuleMap(): Promise<CurrencyRuleMap> {
   try {
     const rows = await db.select().from(currencyRules).orderBy(asc(currencyRules.code));
     const map: CurrencyRuleMap = {};
@@ -37,3 +39,6 @@ export async function getCurrencyRuleList(): Promise<CurrencyRuleConfig[]> {
   const map = await getCurrencyRuleMap();
   return (Object.keys(CURRENCIES) as CurrencyCode[]).map((code) => map[code]);
 }
+
+/** De-duplicated per render — layout and pages share one read. */
+export const getCurrencyRuleMap = cache(readCurrencyRuleMap);

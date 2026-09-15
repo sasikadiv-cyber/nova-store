@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
 import {
@@ -10,6 +11,7 @@ import {
   reviews,
   type Product,
 } from "@/db/schema";
+import { cached, invalidateStock, TAGS, productTag } from "./cache";
 import { evaluateDiscount, recordRedemption } from "./discounts";
 import { evaluateGiftCard, redeemGiftCard } from "./gift-cards";
 import { decrementStock } from "./variants";
@@ -150,13 +152,13 @@ export async function getProducts(filters: ProductFilters = {}): Promise<Product
     .orderBy(...orderBy);
 }
 
-export async function getProductBySlug(slug: string) {
+async function getProductBySlugRaw(slug: string) {
   await ensureSeeded();
   const [product] = await db.select().from(products).where(eq(products.slug, slug)).limit(1);
   return product ?? null;
 }
 
-export async function getProductReviews(productId: number) {
+async function getProductReviewsRaw(productId: number) {
   return db
     .select()
     .from(reviews)
@@ -165,7 +167,7 @@ export async function getProductReviews(productId: number) {
 }
 
 /** The pieces the owner styled together as "Complete the look". */
-export async function getCompleteLook(slugs: string[]) {
+async function getCompleteLookRaw(slugs: string[]) {
   if (slugs.length === 0) return [];
   try {
     const rows = await db.select().from(products).where(inArray(products.slug, slugs));
@@ -176,7 +178,7 @@ export async function getCompleteLook(slugs: string[]) {
   }
 }
 
-export async function getRelatedProducts(product: Product, limit = 4) {
+async function getRelatedProductsRaw(product: Product, limit = 4) {
   const rows = await db
     .select()
     .from(products)
@@ -204,7 +206,7 @@ export async function getRelatedProducts(product: Product, limit = 4) {
   return rows;
 }
 
-export async function getCollections() {
+async function getCollectionsRaw() {
   await ensureSeeded();
   return db.select().from(collections).orderBy(asc(collections.sortOrder));
 }
@@ -214,7 +216,7 @@ export async function getCollectionBySlug(slug: string) {
   return row ?? null;
 }
 
-export async function getFacets(): Promise<Facets> {
+async function getFacetsRaw(): Promise<Facets> {
   await ensureSeeded();
   const rows = await db
     .select({
@@ -261,7 +263,7 @@ export async function getFacets(): Promise<Facets> {
   };
 }
 
-export async function getFeatured(limit = 8) {
+async function getFeaturedRaw(limit = 8) {
   await ensureSeeded();
   return db
     .select()
@@ -271,7 +273,7 @@ export async function getFeatured(limit = 8) {
     .limit(limit);
 }
 
-export async function getNewArrivals(limit = 8) {
+async function getNewArrivalsRaw(limit = 8) {
   await ensureSeeded();
   return db
     .select()
@@ -281,7 +283,7 @@ export async function getNewArrivals(limit = 8) {
     .limit(limit);
 }
 
-export async function getBestSellers(limit = 8) {
+async function getBestSellersRaw(limit = 8) {
   await ensureSeeded();
   return db
     .select()
@@ -291,7 +293,7 @@ export async function getBestSellers(limit = 8) {
     .limit(limit);
 }
 
-export async function getStorefrontStats() {
+async function getStorefrontStatsRaw() {
   await ensureSeeded();
   const [row] = await db
     .select({
@@ -529,6 +531,22 @@ export async function createOrder(input: OrderInput) {
     await redeemGiftCard(giftCardId, discountCents);
   }
 
+  /* A sale must be visible immediately, in two places:
+     1. the tagged data cache (product lists, facets, stats), and
+     2. the route cache — the product page HTML is ISR-cached, so without
+        revalidating those paths the "N left" count would stay stale until the
+        next periodic revalidation. */
+  const soldProductIds = [...new Set(lines.map((line) => line.productId))];
+  for (const productId of soldProductIds) {
+    invalidateStock(productId);
+  }
+
+  for (const slug of [...new Set(lines.map((line) => line.slug))]) {
+    revalidatePath(`/products/${slug}`);
+  }
+  revalidatePath("/shop");
+  revalidatePath("/");
+
   return {
     ok: true as const,
     order: created,
@@ -549,3 +567,57 @@ export async function getOrderByNumber(number: string) {
 export async function getRecentOrders(limit = 5) {
   return db.select().from(orders).orderBy(desc(orders.createdAt)).limit(limit);
 }
+
+
+/* ------------------------------------------------------------ tagged cache */
+
+/*
+ * Public catalogue reads. Each is served from Next's tagged cache and
+ * invalidated the moment the console writes (see `invalidateCatalogue` in
+ * admin actions) or a sale changes stock, so the storefront stays current
+ * without paying a database round trip per visitor.
+ *
+ * The cache only ever holds display data. `createOrder()` re-reads the
+ * catalogue, re-validates stock and recomputes every total on the server, so
+ * a cached page can never produce a wrong charge or an oversell.
+ */
+
+export const getCollections = () =>
+  cached(["collections"], [TAGS.collections, TAGS.catalogue], getCollectionsRaw, 300)();
+
+export const getFacets: () => Promise<Facets> = () =>
+  cached(["facets"], [TAGS.facets, TAGS.catalogue], getFacetsRaw, 300)();
+
+export const getStorefrontStats = () =>
+  cached(["stats"], [TAGS.stats, TAGS.catalogue], getStorefrontStatsRaw, 300)();
+
+export const getFeatured = (limit = 8) =>
+  cached(["featured", String(limit)], [TAGS.catalogue], () => getFeaturedRaw(limit), 300)();
+
+export const getNewArrivals = (limit = 8) =>
+  cached(["new-arrivals", String(limit)], [TAGS.catalogue], () => getNewArrivalsRaw(limit), 300)();
+
+export const getBestSellers = (limit = 8) =>
+  cached(["best-sellers", String(limit)], [TAGS.catalogue], () => getBestSellersRaw(limit), 300)();
+
+export const getProductBySlug = (slug: string) =>
+  cached(
+    ["product", slug],
+    [productTag(slug), TAGS.catalogue],
+    () => getProductBySlugRaw(slug),
+    300,
+  )();
+
+export const getProductReviews = (productId: number) =>
+  cached(["reviews", String(productId)], [TAGS.reviews], () => getProductReviewsRaw(productId), 300)();
+
+export const getRelatedProducts = (product: Product, limit = 4) =>
+  cached(
+    ["related", product.slug, String(limit)],
+    [TAGS.catalogue],
+    () => getRelatedProductsRaw(product, limit),
+    300,
+  )();
+
+export const getCompleteLook = (slugs: string[]) =>
+  cached(["complete-look", ...slugs], [TAGS.catalogue], () => getCompleteLookRaw(slugs), 300)();

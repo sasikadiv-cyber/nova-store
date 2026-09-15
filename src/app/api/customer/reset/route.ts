@@ -2,6 +2,8 @@ import { createHash, randomInt } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+import { guard, rateLimit, clientKey, tooManyRequests } from "@/lib/security";
+
 import { db } from "@/db";
 import { customers } from "@/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/customer-auth";
@@ -22,6 +24,10 @@ function hashCode(email: string, code: string) {
  * code is returned so the flow can be completed without a mail provider.
  */
 export async function POST(request: Request) {
+  /* Requesting a code is cheap to abuse, so keep it tight. */
+  const blocked = guard(request, "reset-ask", 4, 300);
+  if (blocked) return blocked;
+
   let payload: { email?: string };
   try {
     payload = await request.json();
@@ -55,6 +61,10 @@ export async function POST(request: Request) {
 
 /** Step 2 — the code plus a new password. */
 export async function PUT(request: Request) {
+  /* Six digits in a fifteen-minute window — allow a handful of tries only. */
+  const originBlocked = guard(request, "reset-confirm-origin", 20, 300);
+  if (originBlocked) return originBlocked;
+
   let payload: { email?: string; code?: string; password?: string };
   try {
     payload = await request.json();
@@ -80,6 +90,9 @@ export async function PUT(request: Request) {
   if (!customer || !customer.resetCodeHash || !customer.resetExpires) {
     return NextResponse.json({ ok: false, error: "Request a new code." }, { status: 400 });
   }
+  const attempts = rateLimit(`reset-code:${email}`, 5, 900);
+  if (!attempts.ok) return tooManyRequests(attempts);
+
   if (Date.now() > new Date(customer.resetExpires).getTime()) {
     return NextResponse.json({ ok: false, error: "That code has expired — request a new one." }, { status: 400 });
   }

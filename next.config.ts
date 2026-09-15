@@ -35,6 +35,42 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Applies to every response, including HTML.
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+          },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              // Next.js needs inline styles for its own critical CSS.
+              "style-src 'self' 'unsafe-inline'",
+              // Images and films are owner-supplied https links.
+              "img-src 'self' data: https: blob:",
+              "media-src 'self' https:",
+              // next/font injects a small inline script; JSON-LD is inline too.
+              "script-src 'self' 'unsafe-inline'",
+              "font-src 'self' data:",
+              "connect-src 'self' https:",
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "object-src 'none'",
+            ].join("; "),
+          },
+        ],
+      },
+      {
         // Long-lived caching for hashed build output.
         source: "/_next/static/:path*",
         headers: [

@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 
 import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
@@ -17,7 +17,28 @@ import { customers, type Customer } from "@/db/schema";
 const COOKIE_NAME = "nova_customer";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
-const CUSTOMER_SECRET = process.env.CUSTOMER_SECRET ?? process.env.ADMIN_SECRET ?? "nova-client-signing-key-2026";
+/* Never a publicly known constant: fall back to a key derived from this
+   deployment's own configuration, unique per installation. */
+function deriveSecret(scope: string) {
+  const seed = process.env.CUSTOMER_SECRET ?? process.env.ADMIN_SECRET ?? process.env.DATABASE_URL ?? "";
+  if (!seed) return "";
+  return createHash("sha256").update(`nova:${scope}:${seed}`).digest("base64url");
+}
+
+const CUSTOMER_SECRET = deriveSecret("client");
+
+if (!CUSTOMER_SECRET) {
+  throw new Error(
+    "CUSTOMER_SECRET (or ADMIN_SECRET, or DATABASE_URL) must be set so client sessions can be signed.",
+  );
+}
+
+if (process.env.NODE_ENV === "production" && !process.env.CUSTOMER_SECRET) {
+  console.warn(
+    "[nova] CUSTOMER_SECRET is not set — deriving a signing key from the environment. " +
+      "Set CUSTOMER_SECRET explicitly for a stable key.",
+  );
+}
 
 /* --------------------------------------------------------------- passwords */
 

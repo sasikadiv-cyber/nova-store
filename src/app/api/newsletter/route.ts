@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 
+import { guard } from "@/lib/security";
+
 import { db } from "@/db";
 import { subscribers } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const blocked = guard(request, "newsletter", 5, 600);
+  if (blocked) return blocked;
+
   let email = "";
   try {
     const payload = (await request.json()) as { email?: string };
