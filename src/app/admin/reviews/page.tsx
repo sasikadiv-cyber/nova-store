@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, gte } from "drizzle-orm";
 
 import { db } from "@/db";
 import { products, reviews } from "@/db/schema";
@@ -15,6 +15,8 @@ export default async function AdminReviews({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const days = Math.min(365, Math.max(1, Number(typeof params.days === "string" ? params.days : 90)));
+  const since = new Date(Date.now() - days * 86_400_000);
 
   const rows = await db
     .select({
@@ -24,6 +26,7 @@ export default async function AdminReviews({
     })
     .from(reviews)
     .innerJoin(products, eq(reviews.productId, products.id))
+    .where(gte(reviews.createdAt, since))
     .orderBy(desc(reviews.createdAt))
     .limit(120);
 
@@ -31,6 +34,27 @@ export default async function AdminReviews({
     <div>
       <p className="eyebrow text-sage">Community</p>
       <h1 className="mt-3 text-[clamp(2rem,4vw,3rem)]">Reviews</h1>
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <span className="eyebrow mr-1 text-ink-300">Period</span>
+          {[
+            { value: "7", label: "7 days" },
+            { value: "30", label: "30 days" },
+            { value: "90", label: "90 days" },
+            { value: "365", label: "1 year" },
+          ].map((option) => (
+            <Link
+              key={option.value}
+              href={`/admin/reviews?days=${option.value}`}
+              className={`border px-3 py-1.5 text-[11.5px] transition-colors ${
+                String(days) === option.value
+                  ? "border-ink bg-ink text-bone"
+                  : "border-ink/15 text-ink-500 hover:border-ink/45"
+              }`}
+            >
+              {option.label}
+            </Link>
+          ))}
+        </div>
       <p className="mt-3 text-[13px] text-ink-300">
         {rows.length} client reviews. Removing one recalculates the product rating automatically.
       </p>

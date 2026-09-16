@@ -1,10 +1,12 @@
-import { desc, inArray } from "drizzle-orm";
+import Link from "next/link";
+import { desc, inArray, gte } from "drizzle-orm";
 
 import { db } from "@/db";
 import { orderItems, orders } from "@/db/schema";
 import { formatUsd } from "@/lib/currency";
 import { ORDER_FLOW, statusLabel } from "@/lib/customer-queries";
-import { deleteOrderAction, updateOrderStatusAction } from "../actions";
+import { OrderStatusEditor } from "@/components/admin/order-status";
+import { deleteOrderAction } from "../actions";
 import { SubmitButton } from "@/components/admin/submit-button";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +19,15 @@ export default async function AdminOrders({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const days = Math.min(365, Math.max(1, Number(typeof params.days === "string" ? params.days : 90)));
+  const since = new Date(Date.now() - days * 86_400_000);
 
-  const rows = await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(100);
+  const rows = await db
+    .select()
+    .from(orders)
+    .where(gte(orders.createdAt, since))
+    .orderBy(desc(orders.createdAt))
+    .limit(100);
   const ids = rows.map((row) => row.id);
   const items = ids.length
     ? await db.select().from(orderItems).where(inArray(orderItems.orderId, ids))
@@ -30,6 +39,27 @@ export default async function AdminOrders({
     <div>
       <p className="eyebrow text-sage">Commerce</p>
       <h1 className="mt-3 text-[clamp(2rem,4vw,3rem)]">Orders</h1>
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <span className="eyebrow mr-1 text-ink-300">Period</span>
+          {[
+            { value: "7", label: "7 days" },
+            { value: "30", label: "30 days" },
+            { value: "90", label: "90 days" },
+            { value: "365", label: "1 year" },
+          ].map((option) => (
+            <Link
+              key={option.value}
+              href={`/admin/orders?days=${option.value}`}
+              className={`border px-3 py-1.5 text-[11.5px] transition-colors ${
+                String(days) === option.value
+                  ? "border-ink bg-ink text-bone"
+                  : "border-ink/15 text-ink-500 hover:border-ink/45"
+              }`}
+            >
+              {option.label}
+            </Link>
+          ))}
+        </div>
       <p className="mt-3 text-[13px] text-ink-300">
         {rows.length} orders · {formatUsd(revenue)} lifetime revenue
       </p>
@@ -110,39 +140,11 @@ export default async function AdminOrders({
                   </div>
 
                   <div className="flex flex-col items-end gap-2">
-                    <form
-                      action={updateOrderStatusAction}
-                      className="flex flex-col items-end gap-2 border border-sand bg-bone p-3"
-                    >
-                      <input type="hidden" name="id" value={order.id} />
-                      <select
-                        name="status"
-                        defaultValue={order.status}
-                        className="border border-ink/15 bg-bone px-2.5 py-1.5 text-[12px] outline-none focus:border-ink"
-                      >
-                        {STATUSES.map((status) => (
-                          <option key={status} value={status}>
-                            {statusLabel(status)}
-                          </option>
-                        ))}
-                      </select>
-                      <SubmitButton
-                        label="Update"
-                        pendingLabel="Updating"
-                        className="border border-ink/15 px-3 py-1.5 text-[10.5px] uppercase tracking-[0.14em] transition-colors hover:bg-ink hover:text-bone"
-                      />
-                      <input
-                        name="tracking"
-                        defaultValue={order.trackingNumber}
-                        placeholder="Tracking no. (DHL-…)"
-                        className="w-[220px] border border-ink/15 bg-bone px-2.5 py-1.5 font-mono text-[11.5px] outline-none focus:border-ink"
-                      />
-                      <input
-                        name="note"
-                        placeholder="Note for the client timeline"
-                        className="w-[220px] border border-ink/15 bg-bone px-2.5 py-1.5 text-[11.5px] outline-none focus:border-ink"
-                      />
-                    </form>
+                    <OrderStatusEditor
+                      orderId={order.id}
+                      status={order.status}
+                      trackingNumber={order.trackingNumber}
+                    />
                     <form action={deleteOrderAction}>
                       <input type="hidden" name="id" value={order.id} />
                       <SubmitButton

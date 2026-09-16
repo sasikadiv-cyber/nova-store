@@ -114,19 +114,22 @@ export default async function OrderDetailPage({
         </div>
 
         <div className="mt-7">
-          {/* progress rail */}
-          <div className="relative flex items-center justify-between">
-            <div className="absolute left-0 right-0 top-[9px] h-[2px] bg-sand" />
+          {/* Progress rail: stacked vertically on phones (horizontal rails
+              misalign once the labels wrap), horizontal from sm up. */}
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between sm:gap-0">
+            <div className="absolute left-[9px] top-[10px] w-[2px] bg-sand sm:hidden" style={{ height: `${(current / (ORDER_FLOW.length - 1)) * 100}%` }} />
+            <div className="absolute bottom-[10px] left-[9px] top-[10px] w-[2px] bg-sand sm:hidden" />
+            <div className="absolute left-0 right-0 top-[9px] hidden h-[2px] bg-sand sm:block" />
             <div
-              className="absolute left-0 top-[9px] h-[2px] bg-brass transition-[width] duration-700"
+              className="absolute left-0 top-[9px] hidden h-[2px] bg-brass transition-[width] duration-700 sm:block"
               style={{ width: `${(current / (ORDER_FLOW.length - 1)) * 100}%` }}
             />
             {ORDER_FLOW.map((step, index) => {
               const done = index <= current;
               return (
-                <div key={step.id} className="relative flex flex-col items-center">
+                <div key={step.id} className="relative flex items-center gap-3 sm:flex-col sm:items-center sm:gap-0">
                   <span
-                    className={`grid h-5 w-5 place-items-center rounded-full border-2 bg-linen text-ink transition-colors ${
+                    className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 bg-linen text-ink transition-colors ${
                       done ? "border-brass bg-brass" : "border-sand"
                     }`}
                   >
@@ -137,7 +140,7 @@ export default async function OrderDetailPage({
                     )}
                   </span>
                   <span
-                    className={`mt-3 max-w-[92px] text-center text-[10px] uppercase tracking-[0.1em] ${
+                    className={`text-left text-[11px] uppercase tracking-[0.1em] sm:mt-3 sm:max-w-[92px] sm:text-center sm:text-[10px] ${
                       done ? "text-ink" : "text-ink-300"
                     }`}
                   >

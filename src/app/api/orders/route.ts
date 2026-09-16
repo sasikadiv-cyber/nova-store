@@ -26,6 +26,15 @@ type Payload = {
 const METHOD_IDS = ["standard", "express", "priority"];
 
 export async function POST(request: Request) {
+  /* Orders are created by /api/checkout/session and confirmed by Stripe.
+   * This handler is kept only so an old bookmark gets a clear answer. */
+  return Response.json(
+    { ok: false, error: "Checkout runs through Stripe. Start from the bag." },
+    { status: 410 },
+  );
+}
+
+async function unusedPost(request: Request) {
   const blocked = guard(request, "order", 12, 600);
   if (blocked) return blocked;
 

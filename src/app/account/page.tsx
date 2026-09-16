@@ -26,6 +26,9 @@ export default async function AccountPage() {
 
   const activeOrders = allOrders.filter((entry) => isActive(entry.order));
   const recent = allOrders.slice(0, 4);
+  const deliveredPending = allOrders
+    .filter((entry) => entry.order.status === "delivered")
+    .map((entry) => entry.order);
 
   const kpis = [
     { label: "Active orders", value: `${stats.active}`, note: "on their way" },
@@ -124,6 +127,46 @@ export default async function AccountPage() {
           </div>
         )}
       </section>
+
+      {/* ---------------------------------------- review your delivered pieces */}
+      {deliveredPending.length > 0 && (
+        <section className="border-2 border-brass bg-brass/8 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="eyebrow text-brass">Your opinion matters</p>
+              <h2 className="mt-2 text-2xl">Write a review</h2>
+              <p className="mt-2 max-w-lg text-[13.5px] leading-relaxed text-ink-500">
+                {deliveredPending.length} delivered order
+                {deliveredPending.length === 1 ? "" : "s"} waiting for your review — it takes a
+                moment and helps other clients choose well.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-2.5">
+            {deliveredPending.slice(0, 3).map((order) => (
+              <Link
+                key={order.id}
+                href={`/account/orders/${order.id}#review`}
+                className="flex flex-wrap items-center justify-between gap-3 border border-brass/40 bg-linen px-4 py-3 transition-colors hover:border-brass"
+              >
+                <span className="text-[13.5px]">
+                  <span className="font-mono tracking-[0.06em]">{order.orderNumber}</span>
+                  <span className="ml-2 text-ink-300">
+                    delivered {new Date(order.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.16em] text-brass">
+                  Write a review
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                    <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z" />
+                  </svg>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ---------------------------------------------------- recent orders */}
       <section className="mt-12">

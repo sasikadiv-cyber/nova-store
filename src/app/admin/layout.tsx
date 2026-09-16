@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { AdminLoginForm } from "@/components/admin/login-form";
 import { CollapsibleNav } from "@/components/collapsible-nav";
+import { NotificationBell, NotificationFeed } from "@/components/notification-bell";
 import { getCurrentAdmin } from "@/lib/auth";
 import { logoutAction } from "./actions";
 import { SubmitButton } from "@/components/admin/submit-button";
@@ -121,7 +122,26 @@ export default async function AdminLayout({
             </form>
           </div>
 
-          <div className="mx-auto w-full max-w-[1320px] px-5 py-8 md:px-8 md:py-10">{children}</div>
+          <div className="mx-auto w-full max-w-[1320px] px-5 py-8 md:px-8 md:py-10">
+            <div className="space-y-10">
+              {children}
+
+              {/* ---------------------------------------- notifications */}
+              <section id="notifications" className="scroll-mt-24">
+                <div className="border-b border-sand pb-5">
+                  <p className="eyebrow text-sage">Activity</p>
+                  <h2 className="mt-2 text-2xl">Notifications</h2>
+                  <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-300">
+                    New orders, reviews and client messages, filtered by kind and period.
+                  </p>
+                </div>
+                <div className="pt-4">
+                  <NotificationFeed />
+                </div>
+              </section>
+            </div>
+          </div>
+          <NotificationBell />
         </div>
       </div>
     </div>

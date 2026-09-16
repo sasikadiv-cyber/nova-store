@@ -103,15 +103,51 @@ export function SiteFooter() {
             <CookiePreferencesLink />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            {["VISA", "MC", "AMEX", "PAYPAL", "APPLE PAY", "KLARNA"].map((method) => (
-              <span
-                key={method}
-                className="border border-ivory/18 px-2.5 py-1 text-[9.5px] tracking-[0.14em] text-ivory/60"
-              >
-                {method}
+          <div className="flex flex-col items-start gap-3 sm:items-end">
+            {/* Official brand marks, served from /public/icons. */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {[
+                { file: "visa", label: "Visa", w: 52 },
+                { file: "mastercard", label: "Mastercard", w: 40 },
+                { file: "amex", label: "American Express", w: 44 },
+                { file: "paypal", label: "PayPal", w: 56 },
+                { file: "googlepay", label: "Google Pay", w: 52 },
+                { file: "applepay", label: "Apple Pay", w: 52 },
+              ].map((brand) => (
+                <span
+                  key={brand.file}
+                  className="grid h-[24px] place-items-center rounded-[3px] bg-white px-1.5"
+                  title={brand.label}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/icons/${brand.file}.svg`}
+                    alt={brand.label}
+                    width={brand.w}
+                    height={14}
+                    className="h-[13px] w-auto object-contain"
+                  />
+                </span>
+              ))}
+            </div>
+
+            {/* Trust line for the payment provider. */}
+            <span className="flex items-center gap-2.5">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="text-ivory/45">
+                <rect x="4" y="10.5" width="16" height="10" rx="2" />
+                <path d="M8 10.5V7a4 4 0 1 1 8 0v3.5" />
+              </svg>
+              <span className="grid h-[22px] place-items-center rounded-[3px] bg-white px-1.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/icons/stripe.svg"
+                  alt="Stripe"
+                  width={46}
+                  height={13}
+                  className="h-[12px] w-auto object-contain"
+                />
               </span>
-            ))}
+            </span>
           </div>
         </div>
       </div>

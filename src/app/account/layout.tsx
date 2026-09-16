@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { CollapsibleNav } from "@/components/collapsible-nav";
+import { NotificationBell, NotificationFeed } from "@/components/notification-bell";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 import { signOutAction } from "./actions";
 
@@ -71,7 +72,26 @@ export default async function AccountLayout({
           </div>
         </aside>
 
-        <div className="min-w-0 flex-1">{children}</div>
+        <div className="min-w-0 flex-1">
+          <div className="space-y-12">
+            {children}
+
+            {/* ---------------------------------------- notifications */}
+            <section id="notifications" className="scroll-mt-24">
+              <div className="border-b border-sand pb-5">
+                <p className="eyebrow text-sage">Activity</p>
+                <h2 className="mt-2 text-2xl">Notifications</h2>
+                <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-300">
+                  Order updates, delivery changes and anything waiting for your review.
+                </p>
+              </div>
+              <div className="pt-4">
+                <NotificationFeed />
+              </div>
+            </section>
+          </div>
+          <NotificationBell />
+        </div>
       </div>
     </div>
   );

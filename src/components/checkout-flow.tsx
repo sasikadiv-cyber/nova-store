@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { FREE_SHIPPING_THRESHOLD, useStore } from "./store-provider";
 import { Price, Spinner } from "./ui";
+import { StripeEmbedded } from "./stripe-embedded";
 
 const COUNTRIES = [
   "Australia", "Austria", "Belgium", "Brazil", "Canada", "China", "Denmark", "Finland",
@@ -33,10 +34,6 @@ type FormState = {
   country: string;
   phone: string;
   shippingMethod: (typeof METHODS)[number]["id"];
-  cardName: string;
-  cardNumber: string;
-  cardExpiry: string;
-  cardCvc: string;
 };
 
 const STEPS = ["Contact & delivery", "Payment", "Review"];
@@ -70,6 +67,9 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [demoCheckout, setDemoCheckout] = useState(false);
+  const [stripeSecret, setStripeSecret] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({
     email: customer?.email ?? "",
@@ -82,10 +82,6 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
     country: customer?.country ?? "United States",
     phone: customer?.phone ?? "",
     shippingMethod: "standard",
-    cardName: "",
-    cardNumber: "",
-    cardExpiry: "",
-    cardCvc: "",
   });
 
   const method = METHODS.find((entry) => entry.id === form.shippingMethod) ?? METHODS[0];
@@ -106,12 +102,8 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
       );
     }
     if (step === 1) {
-      return (
-        form.cardName.trim().length > 1 &&
-        form.cardNumber.replace(/\s/g, "").length >= 15 &&
-        /^\d{2}\/\d{2}$/.test(form.cardExpiry) &&
-        form.cardCvc.length >= 3
-      );
+      /* Card details are collected by Stripe, so nothing to validate here. */
+      return true;
     }
     return true;
   };
@@ -125,10 +117,65 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
     setStep((current) => Math.min(2, current + 1));
   };
 
+  /* Card payments run on Stripe Checkout, so card details are entered on
+     Stripe's own page and never reach this server. Without Stripe keys the
+     order falls back to the demo flow. */
+  async function startStripeCheckout() {
+    const response = await fetch("/api/checkout/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: form.email,
+        fullName: form.fullName,
+        address1: form.address1,
+        address2: form.address2,
+        city: form.city,
+        region: form.region,
+        postalCode: form.postalCode,
+        country: form.country,
+        phone: form.phone,
+        shippingMethod: form.shippingMethod,
+        discountCode: promo?.code ?? "",
+        items: lines.map((line) => ({
+          slug: line.slug,
+          size: line.size,
+          color: line.color,
+          quantity: line.quantity,
+        })),
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | { ok?: boolean; clientSecret?: string; error?: string }
+      | null;
+
+    if (response.status === 503) return "unavailable";
+    if (!response.ok || !payload?.ok || !payload.clientSecret) {
+      throw new Error(payload?.error ?? "Could not start the payment.");
+    }
+
+    /* The payment form mounts in place on the next step. */
+    setStripeSecret(payload.clientSecret);
+    return "embedded";
+  }
+
   async function placeOrder() {
     setSubmitting(true);
     setError(null);
     try {
+      const outcome = await startStripeCheckout();
+      if (outcome === "embedded") {
+        /* Advance to the payment step, where the Stripe form mounts. */
+        setStep(1);
+        setSubmitting(false);
+        return;
+      }
+
+      /* Stripe must be configured — there is no demo checkout. */
+      throw new Error(
+        "Card payments are not configured on this store. Add STRIPE_SECRET_KEY to enable checkout.",
+      );
+
       const response = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -316,53 +363,66 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
                 <div className="flex items-center justify-between">
                   <p className="eyebrow text-ink-300">Payment</p>
                   <span className="text-[11px] uppercase tracking-[0.14em] text-ink-300">
-                    Encrypted · demo mode
+                    Secured by Stripe
                   </span>
                 </div>
-                <div className="mt-4 space-y-6 border border-ink/12 p-5">
-                  <Field
-                    label="Name on card"
-                    value={form.cardName}
-                    onChange={(v) => set("cardName", v)}
-                  />
-                  <Field
-                    label="Card number"
-                    value={form.cardNumber}
-                    onChange={(v) =>
-                      set(
-                        "cardNumber",
-                        v
-                          .replace(/\D/g, "")
-                          .slice(0, 16)
-                          .replace(/(.{4})/g, "$1 ")
-                          .trim(),
-                      )
-                    }
-                    placeholder="4242 4242 4242 4242"
-                  />
-                  <div className="grid gap-6 sm:grid-cols-2">
-                    <Field
-                      label="Expiry"
-                      value={form.cardExpiry}
-                      placeholder="MM/YY"
-                      onChange={(v) => {
-                        const digits = v.replace(/\D/g, "").slice(0, 4);
-                        set("cardExpiry", digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits);
-                      }}
-                    />
-                    <Field
-                      label="CVC"
-                      value={form.cardCvc}
-                      placeholder="123"
-                      onChange={(v) => set("cardCvc", v.replace(/\D/g, "").slice(0, 4))}
-                    />
+                <div className="mt-4 space-y-4 border border-ink/12 p-5">
+                  {/* Card details are collected on Stripe's own page, so they
+                      never touch this server. */}
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-[42px] w-[62px] shrink-0 place-items-center rounded-[4px] bg-white">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src="/icons/stripe.svg"
+                        alt="Stripe"
+                        width={52}
+                        height={14}
+                        className="h-[14px] w-auto object-contain"
+                      />
+                    </span>
+                    <div>
+                      <p className="text-[14px]">Card payment via Stripe</p>
+                      <p className="mt-0.5 text-[12px] leading-relaxed text-ink-300">
+                        Visa · Mastercard · Amex · Apple Pay · Google Pay
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-[12px] leading-relaxed text-ink-300">
-                    This is a demonstration storefront — no card is charged and no data leaves this
-                    server. Total to be authorised: <Price cents={totalCents} />.
+
+                  <p className="text-[12.5px] leading-relaxed text-ink-500">
+                    You will be taken to Stripe&#39;s secure page to enter your card details. Card
+                    information is handled entirely by Stripe and never passes through this store.
                   </p>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-sand pt-3">
+                    <span className="eyebrow text-ink-300">Total to be authorised</span>
+                    <span className="text-[17px]">
+                      <Price cents={totalCents} />
+                    </span>
+                  </div>
                 </div>
               </div>
+
+              {/* ---------------- Stripe Payment Element, in place ---------- */}
+              {step === 1 && stripeSecret && (
+                <div className="mt-6">
+                  {paymentError && (
+                    <p className="mb-4 border-l-2 border-ember bg-bone px-4 py-3 text-[13px] text-ember">
+                      {paymentError}
+                    </p>
+                  )}
+                  <StripeEmbedded
+                    clientSecret={stripeSecret}
+                    returnPath={`${
+                      typeof window !== "undefined" ? window.location.origin : ""
+                    }/checkout/success?session_id=${stripeSecret.split("_secret")[0]}`}
+                    onCompleted={() => {
+                      clearCart();
+                      setStep(2);
+                    }}
+                    onError={setPaymentError}
+                  />
+                </div>
+              )}
             </section>
           )}
 
@@ -392,7 +452,7 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
                     {method.eta}
                   </p>
                   <p className="mt-3 text-[12.5px] text-ink-300">
-                    Card ending {form.cardNumber.replace(/\s/g, "").slice(-4) || "••••"}
+                    Card payment — taken on Stripe&#39;s secure page
                   </p>
                   {promo && discountCents > 0 && (
                     <p className="mt-3 text-[12.5px]">

@@ -1,4 +1,5 @@
-import { desc } from "drizzle-orm";
+import Link from "next/link";
+import { desc, gte } from "drizzle-orm";
 
 import { db } from "@/db";
 import { contactMessages } from "@/db/schema";
@@ -7,10 +8,14 @@ import { markMessageHandledAction } from "../actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminMessages() {
+export default async function AdminMessages({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = await searchParams;
+  const days = Math.min(365, Math.max(1, Number(typeof params.days === "string" ? params.days : 90)));
+  const since = new Date(Date.now() - days * 86_400_000);
   const messages = await db
     .select()
     .from(contactMessages)
+    .where(gte(contactMessages.createdAt, since))
     .orderBy(desc(contactMessages.createdAt))
     .limit(100);
 
@@ -22,6 +27,28 @@ export default async function AdminMessages() {
         <div>
           <p className="eyebrow text-sage">Client services</p>
           <h1 className="mt-2 text-3xl">Contact messages</h1>
+
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <span className="eyebrow mr-1 text-ink-300">Period</span>
+            {[
+              { value: "7", label: "7 days" },
+              { value: "30", label: "30 days" },
+              { value: "90", label: "90 days" },
+              { value: "365", label: "1 year" },
+            ].map((option) => (
+              <Link
+                key={option.value}
+                href={`/admin/messages?days=${option.value}`}
+                className={`border px-3 py-1.5 text-[11.5px] transition-colors ${
+                  String(days) === option.value
+                    ? "border-ink bg-ink text-bone"
+                    : "border-ink/15 text-ink-500 hover:border-ink/45"
+                }`}
+              >
+                {option.label}
+              </Link>
+            ))}
+          </div>
           <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-ink-300">
             Every message sent from the contact page, newest first.
           </p>

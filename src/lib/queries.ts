@@ -394,7 +394,8 @@ function orderNumber() {
   return `NVA-${code}`;
 }
 
-export async function createOrder(input: OrderInput) {
+export async function createOrder(input: OrderInput, options?: { pending?: boolean }) {
+  const pending = options?.pending === true;
   await ensureSeeded();
 
   const cleanItems = input.items
@@ -471,6 +472,56 @@ export async function createOrder(input: OrderInput) {
   }
 
   const totalCents = Math.max(0, subtotalCents - discountCents) + shippingCents;
+
+  /* While a payment is outstanding nothing is taken: stock and gift-card
+     balances are only committed once Stripe confirms the charge. */
+  if (pending) {
+    const created = await db.transaction(async (tx) => {
+      const [order] = await tx
+        .insert(orders)
+        .values({
+          orderNumber: orderNumber(),
+          email: input.email,
+          fullName: input.fullName,
+          address1: input.address1,
+          address2: input.address2 ?? "",
+          city: input.city,
+          region: input.region ?? "",
+          postalCode: input.postalCode,
+          country: input.country,
+          phone: input.phone ?? "",
+          shippingMethod: method.id,
+          customerId: input.customerId ?? null,
+          currency: "USD",
+          fxRate: 1,
+          subtotalCents,
+          shippingCents,
+          taxCents: 0,
+          discountCode,
+          discountCents,
+          totalCents,
+          status: "pending_payment",
+        })
+        .returning();
+
+      await tx.insert(orderItems).values(lines.map((line) => ({ ...line, orderId: order.id })));
+      await tx.insert(orderEvents).values({
+        orderId: order.id,
+        status: "pending_payment",
+        note: "Awaiting payment confirmation.",
+      });
+      return order;
+    });
+
+    return {
+      ok: true as const,
+      order: created,
+      items: lines,
+      discount: discountCents > 0
+        ? { code: discountCode, discountCents, summary: discountSummary }
+        : null,
+    };
+  }
 
   /* Take the stock before writing the order so an oversell is refused. */
   const taken = await decrementStock(
@@ -621,3 +672,75 @@ export const getRelatedProducts = (product: Product, limit = 4) =>
 
 export const getCompleteLook = (slugs: string[]) =>
   cached(["complete-look", ...slugs], [TAGS.catalogue], () => getCompleteLookRaw(slugs), 300)();
+
+
+/* ------------------------------------------------------------------ fulfilment */
+
+/**
+ * Commits an order that Stripe has confirmed. Idempotent — a webhook and the
+ * success-page redirect can both call it, only the first wins.
+ */
+export async function fulfilOrder(orderId: number) {
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) return { ok: false as const, error: "Order not found." };
+  if (order.status !== "pending_payment") {
+    return { ok: true as const, alreadyFulfilled: true, order };
+  }
+
+  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+
+  const taken = await decrementStock(
+    items.map((line) => ({
+      productId: line.productId,
+      color: line.color,
+      size: line.size,
+      quantity: line.quantity,
+    })),
+  );
+  if (!taken.ok) {
+    await db.update(orders).set({ status: "payment_review" }).where(eq(orders.id, orderId));
+    await db
+      .insert(orderEvents)
+      .values({
+        orderId,
+        status: "payment_review",
+        note: `Paid but stock unavailable: ${taken.error}`,
+      });
+    return { ok: false as const, error: taken.error, order };
+  }
+
+  /* A gift card used at checkout only spends once payment is confirmed. */
+  if (order.discountCode) {
+    const card = await evaluateGiftCard(order.discountCode, order.subtotalCents);
+    if (card.ok) await redeemGiftCard(card.giftCardId, order.discountCents);
+  }
+
+  await db.update(orders).set({ status: "confirmed" }).where(eq(orders.id, orderId));
+  await db.insert(orderEvents).values({
+    orderId,
+    status: "confirmed",
+    note: "Payment received. We have your order.",
+  });
+
+  const soldProductIds = [...new Set(items.map((line) => line.productId))];
+  for (const productId of soldProductIds) {
+    invalidateStock(productId);
+  }
+  for (const slug of [...new Set(items.map((line) => line.slug))]) {
+    revalidatePath(`/products/${slug}`);
+  }
+  revalidatePath("/shop");
+  revalidatePath("/");
+
+  return { ok: true as const, order, items };
+}
+
+/** Looks up a pending order by the Stripe session that is paying for it. */
+export async function getOrderByStripeSession(sessionId: string) {
+  const [order] = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.trackingNumber, `stripe:${sessionId}`))
+    .limit(1);
+  return order ?? null;
+}

@@ -2,7 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Price } from "@/components/ui";
-import { getOrderByNumber, SHIPPING_METHODS } from "@/lib/queries";
+import { CopyButton } from "@/components/copy-button";
+import { fulfilOrder, getOrderByNumber, SHIPPING_METHODS } from "@/lib/queries";
+import { db } from "@/db";
+import { orders } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { stripeEnabled } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +20,34 @@ export default async function SuccessPage({
 }) {
   const params = await searchParams;
   const orderNumber = typeof params.order === "string" ? params.order : null;
-  const result = orderNumber ? await getOrderByNumber(orderNumber) : null;
+
+  /* Returning from Stripe Checkout. The session is verified server-side and
+     the order is only confirmed when Stripe reports it paid — never on the
+     client's say-so. */
+  const stripeSessionId = typeof params.session_id === "string" ? params.session_id : null;
+  let verifiedNumber = orderNumber;
+
+  if (stripeSessionId && stripeEnabled) {
+    try {
+      const { getStripe } = await import("@/lib/stripe");
+      const session = await getStripe().checkout.sessions.retrieve(stripeSessionId);
+      const paid = session.payment_status === "paid" || session.status === "complete";
+      const orderId = Number(session.metadata?.orderId ?? 0);
+
+      if (paid && orderId) {
+        await fulfilOrder(orderId);
+        const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+        verifiedNumber = order?.orderNumber ?? verifiedNumber;
+      } else if (orderId) {
+        const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+        verifiedNumber = order?.orderNumber ?? verifiedNumber;
+      }
+    } catch {
+      /* Stripe unreachable — the webhook still fulfils the order. */
+    }
+  }
+
+  const result = verifiedNumber ? await getOrderByNumber(verifiedNumber) : null;
 
   const method = result
     ? SHIPPING_METHODS[result.order.shippingMethod as keyof typeof SHIPPING_METHODS] ??
@@ -37,6 +69,57 @@ export default async function SuccessPage({
             ? `Your order ${result.order.orderNumber} is confirmed. A receipt is on its way to ${result.order.email}, and you'll get a DHL tracking link as soon as your parcel leaves the atelier.`
             : "Your order has been received. A confirmation email with your tracking link is on its way."}
         </p>
+
+        {result && (
+          <div className="mx-auto mt-8 max-w-xl">
+            {/* ------------------------- tracking number, copyable -------- */}
+            {result.order.trackingNumber && !result.order.trackingNumber.startsWith("stripe:") ? (
+              <div className="border border-sand bg-linen p-5 text-left">
+                <p className="eyebrow text-ink-300">Tracking number</p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <code className="min-w-0 flex-1 break-all border border-dashed border-brass bg-brass/10 px-3 py-2.5 font-mono text-[13px] tracking-[0.08em]">
+                    {result.order.trackingNumber}
+                  </code>
+                  <CopyButton value={result.order.trackingNumber} />
+                </div>
+                <p className="mt-3 text-[12px] leading-relaxed text-ink-300">
+                  Enter this on DHL or UPS to follow your parcel. It is also saved in your account.
+                </p>
+              </div>
+            ) : (
+              <div className="border border-sand bg-linen p-5 text-left">
+                <p className="eyebrow text-ink-300">Order reference</p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <code className="min-w-0 flex-1 break-all border border-dashed border-brass bg-brass/10 px-3 py-2.5 font-mono text-[13px] tracking-[0.08em]">
+                    {result.order.orderNumber}
+                  </code>
+                  <CopyButton value={result.order.orderNumber} />
+                </div>
+                <p className="mt-3 text-[12px] leading-relaxed text-ink-300">
+                  A DHL or UPS tracking number appears here as soon as your parcel leaves the atelier.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href="/account/orders"
+                className="inline-flex items-center gap-2 bg-ink px-7 py-3.5 text-[11px] font-medium uppercase tracking-[0.2em] text-bone transition-colors hover:bg-ink-700"
+              >
+                Track in my account
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M4 12h15M13 6l6 6-6 6" />
+                </svg>
+              </Link>
+              <Link
+                href="/shop"
+                className="border border-ink/20 px-7 py-3.5 text-[11px] font-medium uppercase tracking-[0.2em] transition-colors hover:border-ink"
+              >
+                Continue shopping
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
 
       {result && (
