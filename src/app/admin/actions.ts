@@ -2,6 +2,7 @@
 
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
@@ -35,6 +36,7 @@ import { invalidateCatalogue } from "@/lib/cache";
 import { generateGiftCardCode } from "@/lib/gift-cards";
 import { slugify } from "@/lib/product-form";
 import { ORDER_FLOW } from "@/lib/customer-queries";
+import { rateLimit } from "@/lib/security";
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -89,6 +91,18 @@ export async function loginAction(
 ): Promise<AdminLoginState> {
   const email = text(formData, "email");
   const password = text(formData, "password");
+
+  /* Throttle the console sign-in: five attempts a minute per caller, exactly
+     like the client sign-in route. Slows online brute force to a crawl. */
+  const incoming = await headers();
+  const ip =
+    incoming.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    incoming.get("x-real-ip") ||
+    "unknown";
+  const verdict = rateLimit(`admin-login:${ip}`, 5, 60);
+  if (!verdict.ok) {
+    return { error: "Too many attempts. Please wait a minute and try again." };
+  }
 
   const admin = await verifyCredentials(email, password);
   if (!admin) {

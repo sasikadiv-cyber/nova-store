@@ -46,7 +46,7 @@ export function prepareStripe() {
  * eyebrow labels follow the storefront theme exactly. Card details are typed
  * into Stripe-hosted iframes and never touch this server.
  */
-const NOVA_APPEARANCE = {
+const NOVA_LIGHT_APPEARANCE = {
   theme: "stripe" as const,
   variables: {
     colorPrimary: "#17150f",
@@ -123,6 +123,91 @@ const NOVA_APPEARANCE = {
   },
 };
 
+/* The same design in the dark theme — mirrors globals.css
+   [data-theme="dark"] tokens exactly, so the payment form is fully legible
+   (dark canvas, ivory text, taupe icons) instead of the washed-out light
+   palette that used to render on the dark checkout page. */
+const NOVA_DARK_APPEARANCE = {
+  theme: "stripe" as const,
+  variables: {
+    colorPrimary: "#f1ede5",
+    colorBackground: "#16140f",
+    colorText: "#f1ede5",
+    colorTextSecondary: "#c6bfb4",
+    colorTextPlaceholder: "#948d81",
+    colorIcon: "#948d81",
+    colorDanger: "#cf8a79",
+    colorSuccess: "#7fbe8d",
+    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, sans-serif",
+    fontLineHeight: "1.5",
+    fontSizeBase: "13.5px",
+    fontSizeSm: "12px",
+    borderRadius: "0px",
+    spacingUnit: "4px",
+    spacingGridRow: "20px",
+  },
+  rules: {
+    ".Input": {
+      backgroundColor: "#1d1a15",
+      border: "1px solid rgba(241,237,229,0.18)",
+      boxShadow: "none",
+      color: "#f1ede5",
+      padding: "12px 14px",
+    },
+    ".Input:hover": { border: "1px solid rgba(241,237,229,0.42)" },
+    ".Input:focus": {
+      border: "1px solid #f1ede5",
+      boxShadow: "none",
+      outline: "none",
+    },
+    ".Input::placeholder": { color: "#948d81" },
+    ".Label": {
+      color: "#948d81",
+      fontSize: "10.5px",
+      fontWeight: "500",
+      letterSpacing: "0.16em",
+      textTransform: "uppercase",
+      marginBottom: "8px",
+    },
+    ".Tab": {
+      backgroundColor: "#1d1a15",
+      border: "1px solid rgba(241,237,229,0.18)",
+      borderRadius: "0px",
+      boxShadow: "none",
+      color: "#c6bfb4",
+    },
+    ".Tab:hover": { border: "1px solid rgba(241,237,229,0.45)" },
+    ".Tab--selected": {
+      backgroundColor: "rgba(241,237,229,0.06)",
+      border: "1px solid #f1ede5",
+      borderRadius: "0px",
+      boxShadow: "none",
+      color: "#f1ede5",
+    },
+    ".TabIcon": { color: "#948d81" },
+    ".TabIcon--selected": { color: "#f1ede5" },
+    ".TabLabel": { fontWeight: "500", letterSpacing: "0.02em" },
+    ".Block": {
+      backgroundColor: "#241f19",
+      border: "1px solid #2b2620",
+      borderRadius: "0px",
+      boxShadow: "none",
+    },
+    ".BlockDivider": { backgroundColor: "#2b2620" },
+    ".CheckboxInput": {
+      backgroundColor: "#1d1a15",
+      border: "1px solid rgba(241,237,229,0.32)",
+      borderRadius: "0px",
+    },
+    ".CheckboxInput--checked": {
+      backgroundColor: "#f1ede5",
+      border: "1px solid #f1ede5",
+    },
+    ".Error": { color: "#cf8a79", fontSize: "12px" },
+    ".RedirectText": { color: "#c6bfb4", fontSize: "12.5px" },
+  },
+} as typeof NOVA_LIGHT_APPEARANCE;
+
 export function StripeEmbedded({
   clientSecret,
   returnPath,
@@ -142,6 +227,24 @@ export function StripeEmbedded({
   const sdkRef = useRef<StripeCheckoutElementsSdk | null>(null);
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  /* The payment form must follow the storefront theme — in dark mode the
+     light appearance leaves ivory labels on an ivory canvas. "light" is the
+     SSR-safe starting point; the real theme is read in an effect below. */
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  /* Track <html data-theme> so a mid-checkout theme toggle re-styles the
+     payment form too. */
+  useEffect(() => {
+    const read = () =>
+      setTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light");
+    const frame = requestAnimationFrame(read);
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
   /* The payment overlay walks through its own little flow so the client is
      never left staring at a frozen form: processing → paid → receipt page. */
   const [stage, setStage] = useState<"idle" | "processing" | "succeeded">("idle");
@@ -174,7 +277,7 @@ export function StripeEmbedded({
           clientSecret,
           elementsOptions: {
             loader: "auto",
-            appearance: NOVA_APPEARANCE,
+            appearance: theme === "dark" ? NOVA_DARK_APPEARANCE : NOVA_LIGHT_APPEARANCE,
           },
         });
       } catch {
@@ -209,7 +312,9 @@ export function StripeEmbedded({
       cancelled = true;
       sdkRef.current = null;
     };
-  }, [clientSecret, onError]);
+    /* The element remounts when the theme flips so Stripe re-renders the
+       iframes with the matching palette. */
+  }, [clientSecret, onError, theme]);
 
   async function pay() {
     const sdk = sdkRef.current;

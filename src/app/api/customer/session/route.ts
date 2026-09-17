@@ -15,6 +15,18 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/* Auth endpoints must never be served from a shared/browser cache. */
+const NO_STORE = { "Cache-Control": "no-store" } as const;
+
+/* A real scrypt hash verified when the email has no account, so response
+   time never reveals which addresses are registered (account enumeration).
+   Computed once, lazily. */
+let DUMMY_HASH: string | null = null;
+function dummyHash() {
+  DUMMY_HASH = DUMMY_HASH ?? hashPassword("nova-invalid-credentials");
+  return DUMMY_HASH;
+}
+
 /**
  * Creates a client session (sign in) or a new account (sign up).
  * A plain route handler rather than a server action, so the write path is
@@ -77,7 +89,7 @@ export async function POST(request: Request) {
 
     await createCustomerSession(customer.id);
     revalidatePath("/", "layout");
-    return NextResponse.json({ ok: true, mode, name: customer.fullName });
+    return NextResponse.json({ ok: true, mode, name: customer.fullName }, { headers: NO_STORE });
   }
 
   const [customer] = await db
@@ -86,37 +98,44 @@ export async function POST(request: Request) {
     .where(eq(customers.email, email))
     .limit(1);
 
-  if (!customer || !verifyPassword(password, customer.passwordHash)) {
+  /* Unknown and known emails run the same full-cost verify, then produce the
+     same message — nothing about the account's existence leaks. */
+  const matches = verifyPassword(password, customer?.passwordHash ?? dummyHash());
+
+  if (!customer || !matches) {
     return NextResponse.json(
       { ok: false, error: "That email and password do not match." },
-      { status: 401 },
+      { status: 401, headers: NO_STORE },
     );
   }
 
   await createCustomerSession(customer.id);
   revalidatePath("/", "layout");
-  return NextResponse.json({ ok: true, mode, name: customer.fullName });
+  return NextResponse.json({ ok: true, mode, name: customer.fullName }, { headers: NO_STORE });
 }
 
 /** Lightweight "who am I" check used by the bag and checkout UI. */
 export async function GET() {
   const customer = await getCurrentCustomer();
   if (!customer) {
-    return NextResponse.json({ authenticated: false, customer: null });
+    return NextResponse.json({ authenticated: false, customer: null }, { headers: NO_STORE });
   }
-  return NextResponse.json({
-    authenticated: true,
-    customer: {
-      id: customer.id,
-      email: customer.email,
-      fullName: customer.fullName,
+  return NextResponse.json(
+    {
+      authenticated: true,
+      customer: {
+        id: customer.id,
+        email: customer.email,
+        fullName: customer.fullName,
+      },
     },
-  });
+    { headers: NO_STORE },
+  );
 }
 
 export async function DELETE() {
   const { destroyCustomerSession } = await import("@/lib/customer-auth");
   await destroyCustomerSession();
   revalidatePath("/", "layout");
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true }, { headers: NO_STORE });
 }

@@ -12,7 +12,7 @@ import {
   type Product,
 } from "@/db/schema";
 import { cached, invalidateStock, TAGS, productTag } from "./cache";
-import { evaluateDiscount, recordRedemption } from "./discounts";
+import { evaluateDiscount, recordRedemption, recordRedemptionByCode } from "./discounts";
 import { evaluateGiftCard, redeemGiftCard } from "./gift-cards";
 import { decrementStock } from "./variants";
 import { seedDatabase, seedStoreExtras } from "./seed";
@@ -680,18 +680,41 @@ export const getCompleteLook = (slugs: string[]) =>
 /* ------------------------------------------------------------------ fulfilment */
 
 /**
- * Commits an order that Stripe has confirmed. Idempotent — a webhook and the
- * success-page redirect can both call it, only the first wins.
+ * Commits an order that Stripe has confirmed. Fully idempotent under
+ * concurrency — a webhook and the success-page redirect can call it in the
+ * same instant.
+ *
+ * Step 1 is an atomic status claim (`pending_payment` → `payment_review`)
+ * guarded by the row's CURRENT status, so only one caller ever proceeds;
+ * previously both could pass a "still pending" check and decrement stock
+ * twice for a single payment, or spend a gift card twice.
  */
 export async function fulfilOrder(orderId: number) {
-  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-  if (!order) return { ok: false as const, error: "Order not found." };
-  if (order.status !== "pending_payment") {
-    return { ok: true as const, alreadyFulfilled: true, order };
+  const [claimed] = await db
+    .update(orders)
+    .set({ status: "payment_review" })
+    .where(and(eq(orders.id, orderId), eq(orders.status, "pending_payment")))
+    .returning();
+
+  if (!claimed) {
+    /* Either unknown, or another caller already claimed/finished it. */
+    const [existing] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!existing) return { ok: false as const, error: "Order not found." };
+    if (existing.status === "confirmed") {
+      return { ok: true as const, alreadyFulfilled: true, order: existing };
+    }
+    /* Claimed by a concurrent fulfil that hit a problem stays in
+       payment_review — a human owner's queue, not a retry path. */
+    if (existing.status === "payment_review") {
+      return { ok: true as const, alreadyFulfilled: true, order: existing };
+    }
+    return { ok: false as const, error: "Order is not awaiting payment.", order: existing };
   }
 
+  const order = claimed;
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
 
+  /* Stock: atomic conditional decrements in one all-or-nothing transaction. */
   const taken = await decrementStock(
     items.map((line) => ({
       productId: line.productId,
@@ -700,22 +723,35 @@ export async function fulfilOrder(orderId: number) {
       quantity: line.quantity,
     })),
   );
+
   if (!taken.ok) {
-    await db.update(orders).set({ status: "payment_review" }).where(eq(orders.id, orderId));
-    await db
-      .insert(orderEvents)
-      .values({
-        orderId,
-        status: "payment_review",
-        note: `Paid but stock unavailable: ${taken.error}`,
-      });
+    await db.insert(orderEvents).values({
+      orderId,
+      status: "payment_review",
+      note: `Paid but stock unavailable: ${taken.error}`,
+    });
     return { ok: false as const, error: taken.error, order };
   }
 
-  /* A gift card used at checkout only spends once payment is confirmed. */
+  /* Money-side effects of the discount code, committed exactly once. A gift
+     card's deduction is balance-guarded atomically — if another order spent
+     the balance in the meantime, this paid order goes to review, not silent
+     overspend. A promo code simply ticks its redemption counter. */
   if (order.discountCode) {
     const card = await evaluateGiftCard(order.discountCode, order.subtotalCents);
-    if (card.ok) await redeemGiftCard(card.giftCardId, order.discountCents);
+    if (card.ok) {
+      const spent = await redeemGiftCard(card.giftCardId, order.discountCents);
+      if (!spent.ok) {
+        await db.insert(orderEvents).values({
+          orderId,
+          status: "payment_review",
+          note: "Paid, but the gift card balance was already spent by another order.",
+        });
+        return { ok: false as const, error: "Gift card balance unavailable.", order };
+      }
+    } else {
+      await recordRedemptionByCode(order.discountCode);
+    }
   }
 
   await db.update(orders).set({ status: "confirmed" }).where(eq(orders.id, orderId));

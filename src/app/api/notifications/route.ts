@@ -18,6 +18,9 @@ import { isDispatchTracking } from "@/lib/tracking";
 
 export const dynamic = "force-dynamic";
 
+/* Private, per-session content — never cacheable anywhere. */
+const NO_STORE = { "Cache-Control": "no-store" } as const;
+
 export type NotificationItem = {
   id: string;
   kind: "order" | "review" | "message" | "delivery";
@@ -66,7 +69,7 @@ export async function GET(request: Request) {
     requestedScope === "admin" || admin ? null : await getCurrentCustomer();
 
   if (!admin && !customer) {
-    return NextResponse.json({ ok: true, notifications: [], scope: "anonymous" });
+    return NextResponse.json({ ok: true, notifications: [], scope: "anonymous" }, { headers: NO_STORE });
   }
 
   const items: NotificationItem[] = [];
@@ -321,11 +324,14 @@ export async function GET(request: Request) {
 
   const scoped = kind && kind !== "all" ? items.filter((item) => item.kind === kind) : items;
 
-  return NextResponse.json({
-    ok: true,
-    notifications: scoped.slice(0, 60),
-    scope: admin ? "admin" : "customer",
-    /* Lets the client mark everything currently visible as read. */
-    newestAt: items[0]?.createdAt ?? null,
-  });
+  return NextResponse.json(
+    {
+      ok: true,
+      notifications: scoped.slice(0, 60),
+      scope: admin ? "admin" : "customer",
+      /* Lets the client mark everything currently visible as read. */
+      newestAt: items[0]?.createdAt ?? null,
+    },
+    { headers: NO_STORE },
+  );
 }

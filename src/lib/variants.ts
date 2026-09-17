@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { productVariants, products, type ProductVariant } from "@/db/schema";
@@ -162,13 +162,58 @@ export type StockLine = { productId: number; color: string; size: string; quanti
 
 export type DecrementResult = { ok: true } | { ok: false; error: string };
 
+/** Executes queries on either the global client or an open transaction. */
+export type DbLike = Pick<typeof db, "select" | "update" | "insert" | "delete" | "execute">;
+
+async function syncProductStockTx(tx: DbLike, productId: number) {
+  await tx
+    .update(products)
+    .set({
+      stock: sql`coalesce((select sum(${productVariants.stock}) from ${productVariants} where ${productVariants.productId} = ${productId}), 0)`,
+    })
+    .where(eq(products.id, productId));
+}
+
 /**
- * Takes stock when an order is placed. Runs inside the order transaction and
- * refuses the line when there is not enough of that exact combination left.
+ * The heart of oversell protection. Every decrement is a single atomic
+ * UPDATE … WHERE stock >= quantity, so two customers buying the last unit at
+ * the same instant can never both win: the second finds no row to update.
+ * Previously this read the row first and subtracted in application code —
+ * a race that allowed overselling under concurrent checkouts.
+ *
+ * Runs inside the caller's transaction, so a failure on any line rolls back
+ * every earlier line of the same order (no silent stock leaks).
  */
-export async function decrementStock(lines: StockLine[]): Promise<DecrementResult> {
+export async function decrementStockTx(
+  tx: DbLike,
+  lines: StockLine[],
+): Promise<DecrementResult> {
   for (const line of lines) {
-    const [variant] = await db
+    const [taken] = await tx
+      .update(productVariants)
+      .set({
+        stock: sql`${productVariants.stock} - ${line.quantity}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(productVariants.productId, line.productId),
+          eq(productVariants.color, line.color),
+          eq(productVariants.size, line.size),
+          /* The atomic guard: this row is touched only while it can afford
+             the sale. Database row locks serialise concurrent buyers here. */
+          gte(productVariants.stock, line.quantity),
+        ),
+      )
+      .returning({ id: productVariants.id });
+
+    if (taken) {
+      await syncProductStockTx(tx, line.productId);
+      continue;
+    }
+
+    /* Nothing was taken — read the row to phrase an honest refusal. */
+    const [variant] = await tx
       .select()
       .from(productVariants)
       .where(
@@ -181,40 +226,76 @@ export async function decrementStock(lines: StockLine[]): Promise<DecrementResul
       .limit(1);
 
     if (variant) {
-      if (variant.stock < line.quantity) {
-        return {
-          ok: false,
-          error: `Only ${variant.stock} left in ${line.color} · ${line.size}.`,
-        };
-      }
-      await db
-        .update(productVariants)
-        .set({ stock: variant.stock - line.quantity, updatedAt: new Date() })
-        .where(eq(productVariants.id, variant.id));
-    } else {
-      /* No row for this exact combination — never let that bypass the guard,
-         so an out-of-stock piece cannot be sold under any colour or size. */
-      const [product] = await db
+      return {
+        ok: false,
+        error: `Only ${variant.stock} left in ${line.color} · ${line.size}.`,
+      };
+    }
+
+    /* The exact combination has no row. When the product tracks variants at
+       all, refuse outright — a missing combination must never bypass the
+       guard and sell under a weaker product-level counter. */
+    const [anyVariant] = await tx
+      .select({ id: productVariants.id })
+      .from(productVariants)
+      .where(eq(productVariants.productId, line.productId))
+      .limit(1);
+
+    if (anyVariant) {
+      return { ok: false, error: "That size and colour combination is not available." };
+    }
+
+    /* Legacy product with no variant rows: same atomic guard, product level. */
+    const [takenProduct] = await tx
+      .update(products)
+      .set({ stock: sql`${products.stock} - ${line.quantity}` })
+      .where(and(eq(products.id, line.productId), gte(products.stock, line.quantity)))
+      .returning({ id: products.id });
+
+    if (!takenProduct) {
+      const [product] = await tx
         .select({ stock: products.stock })
         .from(products)
         .where(eq(products.id, line.productId))
         .limit(1);
 
-      if (product && product.stock < line.quantity) {
-        return {
-          ok: false,
-          error:
-            product.stock === 0
-              ? "This piece is currently out of stock."
-              : `Only ${product.stock} left of this piece.`,
-        };
-      }
+      return {
+        ok: false,
+        error:
+          !product || product.stock === 0
+            ? "This piece is currently out of stock."
+            : `Only ${product.stock} left of this piece.`,
+      };
     }
-
-    await syncProductStock(line.productId);
   }
 
   return { ok: true };
+}
+
+/** Sentinal thrown inside the transaction to roll back a partial decrement. */
+class DecrementRollback extends Error {}
+
+/**
+ * Takes stock for a whole order atomically: either every line is taken or
+ * none is, so a mid-order stock failure can never leak stock from the lines
+ * that happened to succeed first.
+ */
+export async function decrementStock(lines: StockLine[]): Promise<DecrementResult> {
+  let result: DecrementResult = { ok: true };
+
+  try {
+    await db.transaction(async (tx) => {
+      result = await decrementStockTx(tx, lines);
+      if (!result.ok) {
+        /* Rolling back the throws restores any earlier line's decrement. */
+        throw new DecrementRollback();
+      }
+    });
+  } catch (error) {
+    if (!(error instanceof DecrementRollback)) throw error;
+  }
+
+  return result;
 }
 
 /** Shape the storefront needs to render per-colour and per-size availability. */

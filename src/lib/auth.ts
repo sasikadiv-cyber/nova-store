@@ -91,14 +91,37 @@ export function verifyAdminPassword(password: string, stored: string) {
   return timingSafeEqual(candidate, expected);
 }
 
+/** Constant-time equality for plain configuration secrets (owner password). */
+function safeEqual(given: string, expected: string) {
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/* A real scrypt hash verified whenever the account does not exist, so an
+   attacker cannot tell registered emails from unregistered ones by watching
+   response times. Computed once, lazily. */
+let DUMMY_HASH: string | null = null;
+function dummyHash() {
+  DUMMY_HASH = DUMMY_HASH ?? hashAdminPassword("nova-timing-equaliser");
+  return DUMMY_HASH;
+}
+
 /* ------------------------------------------------------------- credentials */
 
 /** Checks the owner (environment) first, then the team table. */
 export async function verifyCredentials(email: string, password: string): Promise<AdminUser | null> {
   const normalised = email.trim().toLowerCase();
 
-  if (normalised === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
-    return { id: 0, email: ADMIN_EMAIL, name: "Store owner", role: "owner" };
+  /* Owner credentials are compared in constant time; previously `===` leaked
+     the prefix through comparison timing. When the password is wrong, still
+     run one scrypt verify below so owner and team paths take similar time. */
+  if (normalised === ADMIN_EMAIL.toLowerCase()) {
+    if (safeEqual(password, ADMIN_PASSWORD)) {
+      return { id: 0, email: ADMIN_EMAIL, name: "Store owner", role: "owner" };
+    }
+    verifyAdminPassword(password, dummyHash());
+    return null;
   }
 
   const [row] = await db
@@ -107,8 +130,10 @@ export async function verifyCredentials(email: string, password: string): Promis
     .where(eq(adminUsers.email, normalised))
     .limit(1);
 
-  if (!row || !row.active) return null;
-  if (!verifyAdminPassword(password, row.passwordHash)) return null;
+  /* Always run a full-cost verify — unknown and disabled accounts must be
+     indistinguishable from a wrong password (no account enumeration). */
+  const valid = verifyAdminPassword(password, row && row.active ? row.passwordHash : dummyHash());
+  if (!row || !row.active || !valid) return null;
 
   return {
     id: row.id,

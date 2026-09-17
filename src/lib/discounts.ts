@@ -164,3 +164,22 @@ export async function recordRedemption(codeId: number) {
     .set({ redeemedCount: sql`${discountCodes.redeemedCount} + 1` })
     .where(and(eq(discountCodes.id, codeId)));
 }
+
+/**
+ * Same counter update, but keyed by the code text an order carries — used
+ * when Stripe confirms the payment, the moment a code is genuinely spent.
+ * Idempotency comes from fulfilOrder's atomic status claim, so this runs at
+ * most once per order.
+ */
+export async function recordRedemptionByCode(
+  rawCode: string,
+  tx?: Pick<typeof db, "update">,
+) {
+  const codeText = rawCode.trim().toUpperCase().replace(/\s+/g, "");
+  if (!codeText) return;
+  const executor = tx ?? db;
+  await executor
+    .update(discountCodes)
+    .set({ redeemedCount: sql`${discountCodes.redeemedCount} + 1` })
+    .where(sql`upper(${discountCodes.code}) = ${codeText}`);
+}

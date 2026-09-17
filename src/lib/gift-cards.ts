@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { giftCards } from "@/db/schema";
@@ -45,14 +45,36 @@ export async function evaluateGiftCard(
   };
 }
 
-/** Spends from a gift card after the order is written. */
-export async function redeemGiftCard(id: number, amountCents: number) {
-  const [card] = await db.select().from(giftCards).where(eq(giftCards.id, id)).limit(1);
-  if (!card) return;
-  await db
+/**
+ * Spends from a gift card after the order is written.
+ *
+ * The deduction is one atomic UPDATE guarded by the current balance, so two
+ * orders racing the same card can never spend more than it holds. Previously
+ * this read the balance and wrote balance-amount in two steps — a second
+ * racing order saw the pre-deduction balance and overdrew the card.
+ */
+export async function redeemGiftCard(
+  id: number,
+  amountCents: number,
+  tx?: Pick<typeof db, "update">,
+): Promise<{ ok: boolean }> {
+  const executor = tx ?? db;
+  const [updated] = await executor
     .update(giftCards)
-    .set({ balanceCents: Math.max(0, card.balanceCents - amountCents), updatedAt: new Date() })
-    .where(eq(giftCards.id, id));
+    .set({
+      balanceCents: sql`greatest(0, ${giftCards.balanceCents} - ${amountCents})`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(giftCards.id, id),
+        eq(giftCards.active, true),
+        gte(giftCards.balanceCents, amountCents),
+      ),
+    )
+    .returning({ id: giftCards.id });
+
+  return { ok: Boolean(updated) };
 }
 
 /** A friendly, unguessable code such as NOVAGC-4K7Q2M. */
