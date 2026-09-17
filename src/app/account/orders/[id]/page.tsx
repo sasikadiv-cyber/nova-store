@@ -13,6 +13,7 @@ import {
 } from "@/lib/customer-queries";
 import { formatUsd } from "@/lib/currency";
 import { SHIPPING_METHODS } from "@/lib/queries";
+import { trackingLink } from "@/lib/tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,7 @@ export default async function OrderDetailPage({
   const method =
     SHIPPING_METHODS[order.shippingMethod as keyof typeof SHIPPING_METHODS] ??
     SHIPPING_METHODS.standard;
+  const parcel = trackingLink(order.trackingNumber);
 
   return (
     <div>
@@ -109,9 +111,32 @@ export default async function OrderDetailPage({
           <h2 className="text-2xl">Tracking</h2>
           <p className="text-[12.5px] text-ink-300">
             {method.label} · {method.eta}
-            {order.trackingNumber ? ` · ${order.trackingNumber}` : ""}
           </p>
         </div>
+
+        {parcel ? (
+          <div className="mt-5 flex flex-wrap items-center gap-3 border border-dashed border-brass bg-brass/10 px-4 py-3">
+            <span className="eyebrow text-brass">{parcel.carrier}</span>
+            <code className="min-w-0 flex-1 break-all font-mono text-[12.5px] tracking-[0.08em]">
+              {parcel.number}
+            </code>
+            <a
+              href={parcel.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex shrink-0 items-center gap-2 bg-ink px-4 py-2 text-[10.5px] font-medium uppercase tracking-[0.18em] text-bone transition-colors hover:bg-ink-700"
+            >
+              Track parcel
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+              </svg>
+            </a>
+          </div>
+        ) : (
+          <p className="mt-5 border border-dashed border-sand px-4 py-3 text-[12.5px] text-ink-300">
+            A carrier tracking link appears here the moment your parcel leaves the atelier.
+          </p>
+        )}
 
         <div className="mt-7">
           {/* Progress rail: stacked vertically on phones (horizontal rails

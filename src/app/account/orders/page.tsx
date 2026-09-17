@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Price } from "@/components/ui";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 import { getCustomerOrders, isActive, statusLabel } from "@/lib/customer-queries";
+import { trackingLink } from "@/lib/tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -71,10 +72,18 @@ export default async function AccountOrdersPage() {
                         · {items.reduce((t, i) => t + i.quantity, 0)} pieces · {order.shippingMethod}{" "}
                         shipping
                       </p>
-                      {order.trackingNumber && (
-                        <p className="mt-1 font-mono text-[11px] text-ink-300">
-                          {order.trackingNumber}
-                        </p>
+                      {trackingLink(order.trackingNumber) && (
+                        <a
+                          href={trackingLink(order.trackingNumber)!.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="link-underline mt-1 inline-flex items-center gap-1.5 font-mono text-[11px] text-brass"
+                        >
+                          {trackingLink(order.trackingNumber)!.number}
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 4h6v6M20 4l-9 9" />
+                          </svg>
+                        </a>
                       )}
                       {order.status === "delivered" && (
                         <p className="mt-1.5 text-[11px] uppercase tracking-[0.12em] text-brass">

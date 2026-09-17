@@ -3,6 +3,8 @@ import Link from "next/link";
 
 import { Price } from "@/components/ui";
 import { CopyButton } from "@/components/copy-button";
+import { ClearCart } from "@/components/clear-cart";
+import { trackingLink } from "@/lib/tracking";
 import { fulfilOrder, getOrderByNumber, SHIPPING_METHODS } from "@/lib/queries";
 import { db } from "@/db";
 import { orders } from "@/db/schema";
@@ -54,8 +56,14 @@ export default async function SuccessPage({
       SHIPPING_METHODS.standard
     : SHIPPING_METHODS.standard;
 
+  /* A dispatched parcel carries a carrier reference; before dispatch the
+     column still holds the Stripe session, which is not trackable. */
+  const tracking = trackingLink(result?.order.trackingNumber);
+
   return (
     <div className="mx-auto w-full max-w-[1100px] px-5 py-16 md:px-10 md:py-24">
+      {/* The Stripe redirect lands here — empty the bag stored on this device. */}
+      <ClearCart />
       <div className="animate-fade-up text-center">
         <span className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-ink/15">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3">
@@ -73,17 +81,33 @@ export default async function SuccessPage({
         {result && (
           <div className="mx-auto mt-8 max-w-xl">
             {/* ------------------------- tracking number, copyable -------- */}
-            {result.order.trackingNumber && !result.order.trackingNumber.startsWith("stripe:") ? (
+            {tracking ? (
               <div className="border border-sand bg-linen p-5 text-left">
-                <p className="eyebrow text-ink-300">Tracking number</p>
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="eyebrow text-ink-300">Tracking number</p>
+                  <span className="text-[11px] uppercase tracking-[0.14em] text-brass">
+                    {tracking.carrier}
+                  </span>
+                </div>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <code className="min-w-0 flex-1 break-all border border-dashed border-brass bg-brass/10 px-3 py-2.5 font-mono text-[13px] tracking-[0.08em]">
-                    {result.order.trackingNumber}
+                    {tracking.number}
                   </code>
-                  <CopyButton value={result.order.trackingNumber} />
+                  <CopyButton value={tracking.number} />
                 </div>
+                <a
+                  href={tracking.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-flex items-center gap-2 border border-ink/20 px-5 py-2.5 text-[11px] font-medium uppercase tracking-[0.18em] transition-colors hover:bg-ink hover:text-bone"
+                >
+                  Track my parcel
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                    <path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+                  </svg>
+                </a>
                 <p className="mt-3 text-[12px] leading-relaxed text-ink-300">
-                  Enter this on DHL or UPS to follow your parcel. It is also saved in your account.
+                  Opens {tracking.carrier} in a new tab. This link is also saved in your account.
                 </p>
               </div>
             ) : (

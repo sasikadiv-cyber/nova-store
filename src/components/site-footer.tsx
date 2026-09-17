@@ -137,16 +137,15 @@ export function SiteFooter() {
                 <rect x="4" y="10.5" width="16" height="10" rx="2" />
                 <path d="M8 10.5V7a4 4 0 1 1 8 0v3.5" />
               </svg>
-              <span className="grid h-[22px] place-items-center rounded-[3px] bg-white px-1.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/icons/stripe.svg"
-                  alt="Stripe"
-                  width={46}
-                  height={13}
-                  className="h-[12px] w-auto object-contain"
-                />
-              </span>
+              <span className="text-[11.5px] text-ivory/50">Secure payments · Powered by</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icons/stripe-gray.svg"
+                alt="Stripe"
+                width={52}
+                height={22}
+                className="h-[15px] w-auto object-contain"
+              />
             </span>
           </div>
         </div>

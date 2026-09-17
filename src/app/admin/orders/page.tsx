@@ -61,7 +61,8 @@ export default async function AdminOrders({
           ))}
         </div>
       <p className="mt-3 text-[13px] text-ink-300">
-        {rows.length} orders · {formatUsd(revenue)} lifetime revenue
+        {rows.length} orders · {formatUsd(revenue)} revenue in the last{" "}
+        {days >= 365 ? "year" : `${days} days`}
       </p>
 
       {params.saved && (

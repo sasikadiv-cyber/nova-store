@@ -43,7 +43,11 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+            // payment must stay enabled for us and Stripe's frames —
+            // the Payment Element uses the Payment Request API (Apple Pay,
+            // Google Pay) and `payment=()` blocks it in the whole document.
+            value:
+              'camera=(), microphone=(), geolocation=(), payment=(self "https://js.stripe.com"), usb=()',
           },
           {
             key: "Strict-Transport-Security",
@@ -59,9 +63,14 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: https: blob:",
               "media-src 'self' https:",
               // next/font injects a small inline script; JSON-LD is inline too.
-              "script-src 'self' 'unsafe-inline'",
+              // js.stripe.com powers the embedded Payment Element at checkout.
+              "script-src 'self' 'unsafe-inline' https://js.stripe.com",
               "font-src 'self' data:",
-              "connect-src 'self' https:",
+              "connect-src 'self' https: wss:",
+              // Stripe's hosted iframes (embedded Checkout, Payment Element,
+              // 3-D Secure) and web workers used by Stripe.js fraud telemetry.
+              "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
+              "worker-src 'self' blob:",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",

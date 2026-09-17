@@ -80,6 +80,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           }}
         />
         <meta name="theme-color" content="#f7f4ef" />
+        {/* Warm the connection for Stripe.js so the checkout payment step
+            never waits on DNS/TLS handshakes (Stripe latency guidance). */}
+        <link rel="dns-prefetch" href="https://js.stripe.com" />
+        <link rel="preconnect" href="https://js.stripe.com" crossOrigin="anonymous" />
       </head>
       <body className="bg-bone text-ink antialiased">
         <StoreProvider currencyRules={currencyRules}>

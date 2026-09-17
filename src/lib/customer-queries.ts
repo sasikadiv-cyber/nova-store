@@ -29,8 +29,22 @@ export const ORDER_FLOW = [
 export const ORDER_STATUSES = [...ORDER_FLOW.map((s) => s.id), "cancelled", "refunded"] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+/* Statuses that sit outside the happy path, so they never appear in
+   ORDER_FLOW but still need a human label wherever they surface. */
+const OFF_FLOW_LABELS: Record<string, string> = {
+  pending_payment: "Awaiting payment",
+  payment_review: "Payment in review",
+  cancelled: "Cancelled",
+  refunded: "Refunded",
+};
+
 export function statusLabel(status: string) {
-  return ORDER_FLOW.find((step) => step.id === status)?.label ?? status;
+  return (
+    ORDER_FLOW.find((step) => step.id === status)?.label ??
+    OFF_FLOW_LABELS[status] ??
+    /* Last resort: turn a snake_case id into readable words. */
+    status.replace(/_/g, " ").replace(/^./, (char) => char.toUpperCase())
+  );
 }
 
 export function statusIndex(status: string) {

@@ -10,8 +10,35 @@ type Item = {
   detail: string;
   href: string;
   createdAt: string;
-  unread: boolean;
+  actionable: boolean;
 };
+
+const SEEN_KEY = "nova.notifications.readAt";
+
+/** The moment the user last acknowledged the feed, as epoch ms. */
+function readLastSeen() {
+  try {
+    return Number(window.localStorage.getItem(SEEN_KEY) ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeLastSeen(iso: string | null) {
+  try {
+    window.localStorage.setItem(
+      SEEN_KEY,
+      String(iso ? new Date(iso).getTime() : Date.now()),
+    );
+  } catch {
+    /* Private mode — the badge simply stays live. */
+  }
+}
+
+/** Anything created after the last acknowledgement is genuinely new. */
+function countUnseen(items: Item[], lastSeen: number) {
+  return items.filter((item) => new Date(item.createdAt).getTime() > lastSeen).length;
+}
 
 const KIND_META: Record<string, { label: string; icon: React.ReactNode }> = {
   order: {
@@ -79,12 +106,16 @@ export function NotificationFeed({ compact = false }: { compact?: boolean }) {
   const [kind, setKind] = useState<string>("all");
   const [days, setDays] = useState<string>("30");
   const [loading, setLoading] = useState(true);
+  const [lastSeen, setLastSeen] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`/api/notifications?kind=${kind}&days=${days}`);
-      const payload = (await response.json()) as { notifications?: Item[] };
+      const payload = (await response.json()) as {
+        notifications?: Item[];
+        newestAt?: string | null;
+      };
       setItems(payload.notifications ?? []);
     } catch {
       setItems([]);
@@ -94,10 +125,22 @@ export function NotificationFeed({ compact = false }: { compact?: boolean }) {
   }, [kind, days]);
 
   useEffect(() => {
+    setLastSeen(readLastSeen());
+  }, []);
+
+  useEffect(() => {
     load();
   }, [load]);
 
-  const unread = items.filter((item) => item.unread).length;
+  const unread = countUnseen(items, lastSeen);
+
+  /* Reading the full feed is the acknowledgement — mark everything shown as
+     seen so the badge reflects what is actually new next time. */
+  function markAllRead() {
+    const newest = items[0]?.createdAt ?? null;
+    writeLastSeen(newest);
+    setLastSeen(newest ? new Date(newest).getTime() : Date.now());
+  }
 
   return (
     <div>
@@ -135,6 +178,15 @@ export function NotificationFeed({ compact = false }: { compact?: boolean }) {
               {range.label}
             </button>
           ))}
+          {unread > 0 && (
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="border border-brass/50 bg-brass/10 px-2.5 py-1.5 text-[11px] text-brass transition-colors hover:border-brass"
+            >
+              Mark {unread} read
+            </button>
+          )}
           <button
             type="button"
             onClick={load}
@@ -170,6 +222,7 @@ export function NotificationFeed({ compact = false }: { compact?: boolean }) {
         ) : (
           items.map((item) => {
             const meta = KIND_META[item.kind] ?? KIND_META.order;
+            const isNew = new Date(item.createdAt).getTime() > lastSeen;
             return (
               <Link
                 key={item.id}
@@ -178,7 +231,9 @@ export function NotificationFeed({ compact = false }: { compact?: boolean }) {
               >
                 <span
                   className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${
-                    item.unread ? "bg-brass/18 text-brass" : "bg-bone-dark text-ink-300"
+                    isNew || item.actionable
+                      ? "bg-brass/18 text-brass"
+                      : "bg-bone-dark text-ink-300"
                   }`}
                 >
                   {meta.icon}
@@ -194,11 +249,14 @@ export function NotificationFeed({ compact = false }: { compact?: boolean }) {
                   <span className="mt-0.5 block text-[12.5px] leading-relaxed text-ink-300">
                     {item.detail}
                   </span>
+                  {item.actionable && (
+                    <span className="mt-1.5 inline-block bg-brass/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-brass">
+                      Needs attention
+                    </span>
+                  )}
                 </span>
 
-                {item.unread && (
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brass" />
-                )}
+                {isNew && <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brass" />}
               </Link>
             );
           })
@@ -220,14 +278,9 @@ export function NotificationBell() {
         const response = await fetch("/api/notifications?kind=all&days=30");
         const payload = (await response.json()) as { notifications?: Item[] };
         if (!active) return;
-        const seen = (() => {
-          try {
-            return window.localStorage.getItem("nova.notifications.seen") ?? "";
-          } catch {
-            return "";
-          }
-        })();
-        setCount((payload.notifications ?? []).filter((item) => item.unread && item.id !== seen).length);
+        /* Badge counts what has arrived since the feed was last read, so it
+           empties when the owner actually reads it — not on every reload. */
+        setCount(countUnseen(payload.notifications ?? [], readLastSeen()));
       } catch {
         /* ignore */
       }
@@ -241,7 +294,16 @@ export function NotificationBell() {
     <>
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() =>
+          setOpen((value) => {
+            /* Opening the popover is reading it. */
+            if (!value) {
+              writeLastSeen(null);
+              setCount(0);
+            }
+            return !value;
+          })
+        }
         aria-label={`Notifications${count > 0 ? `, ${count} unread` : ""}`}
         aria-expanded={open}
         className="fixed bottom-5 right-5 z-[180] grid h-12 w-12 place-items-center rounded-full border border-sand bg-linen text-ink shadow-lift transition-transform hover:scale-105"

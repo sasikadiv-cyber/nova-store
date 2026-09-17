@@ -175,6 +175,16 @@ html {
   }
 }
 
+/* Indeterminate progress bar — used while a payment is being confirmed. */
+@keyframes loading {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

@@ -3,11 +3,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { FREE_SHIPPING_THRESHOLD, useStore } from "./store-provider";
 import { Price, Spinner } from "./ui";
-import { StripeEmbedded } from "./stripe-embedded";
+import { StripeEmbedded, prepareStripe } from "./stripe-embedded";
 
 const COUNTRIES = [
   "Australia", "Austria", "Belgium", "Brazil", "Canada", "China", "Denmark", "Finland",
@@ -71,6 +71,10 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
   const [stripeSecret, setStripeSecret] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* True once Stripe confirms the charge. The empty-bag state below must not
+     fire while the success popup is still on screen — emptying the bag there
+     would unmount the payment form and dismiss the popup with it. */
+  const [paid, setPaid] = useState(false);
   const [form, setForm] = useState<FormState>({
     email: customer?.email ?? "",
     fullName: customer?.fullName ?? "",
@@ -83,6 +87,12 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
     phone: customer?.phone ?? "",
     shippingMethod: "standard",
   });
+
+  /* Warm Stripe.js as soon as the checkout page exists, so the payment step
+     never waits on the script download (Stripe's own latency guidance). */
+  useEffect(() => {
+    prepareStripe();
+  }, []);
 
   const method = METHODS.find((entry) => entry.id === form.shippingMethod) ?? METHODS[0];
   const shippingCents =
@@ -212,7 +222,7 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
     }
   }
 
-  if (hydrated && lines.length === 0) {
+  if (hydrated && lines.length === 0 && !paid) {
     return (
       <div className="mx-auto flex max-w-lg flex-col items-center gap-5 px-6 py-28 text-center">
         <p className="eyebrow text-ink-300">Checkout</p>
@@ -366,43 +376,46 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
                     Secured by Stripe
                   </span>
                 </div>
-                <div className="mt-4 space-y-4 border border-ink/12 p-5">
-                  {/* Card details are collected on Stripe's own page, so they
-                      never touch this server. */}
-                  <div className="flex items-center gap-3">
-                    <span className="grid h-[42px] w-[62px] shrink-0 place-items-center rounded-[4px] bg-white">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src="/icons/stripe.svg"
-                        alt="Stripe"
-                        width={52}
-                        height={14}
-                        className="h-[14px] w-auto object-contain"
-                      />
-                    </span>
-                    <div>
-                      <p className="text-[14px]">Card payment via Stripe</p>
-                      <p className="mt-0.5 text-[12px] leading-relaxed text-ink-300">
-                        Visa · Mastercard · Amex · Apple Pay · Google Pay
-                      </p>
+                {!stripeSecret && (
+                  <div className="mt-4 space-y-4 border border-ink/12 p-5">
+                    {/* Card details are entered into Stripe's embedded form,
+                        so they never touch this server. */}
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-[42px] w-[62px] shrink-0 place-items-center rounded-[4px] bg-white">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src="/icons/stripe.svg"
+                          alt="Stripe"
+                          width={52}
+                          height={14}
+                          className="h-[14px] w-auto object-contain"
+                        />
+                      </span>
+                      <div>
+                        <p className="text-[14px]">Card payment via Stripe</p>
+                        <p className="mt-0.5 text-[12px] leading-relaxed text-ink-300">
+                          Visa · Mastercard · Amex · Apple Pay · Google Pay
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-[12.5px] leading-relaxed text-ink-500">
+                      Once your order is placed, Stripe&#39;s secure payment form opens right here —
+                      card information is handled entirely by Stripe and never passes through this
+                      store.
+                    </p>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-sand pt-3">
+                      <span className="eyebrow text-ink-300">Total to be authorised</span>
+                      <span className="text-[17px]">
+                        <Price cents={totalCents} />
+                      </span>
                     </div>
                   </div>
-
-                  <p className="text-[12.5px] leading-relaxed text-ink-500">
-                    You will be taken to Stripe&#39;s secure page to enter your card details. Card
-                    information is handled entirely by Stripe and never passes through this store.
-                  </p>
-
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-sand pt-3">
-                    <span className="eyebrow text-ink-300">Total to be authorised</span>
-                    <span className="text-[17px]">
-                      <Price cents={totalCents} />
-                    </span>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* ---------------- Stripe Payment Element, in place ---------- */}
+              {/* ---------------- Stripe embedded Checkout, in place -------- */}
               {step === 1 && stripeSecret && (
                 <div className="mt-6">
                   {paymentError && (
@@ -415,10 +428,8 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
                     returnPath={`${
                       typeof window !== "undefined" ? window.location.origin : ""
                     }/checkout/success?session_id=${stripeSecret.split("_secret")[0]}`}
-                    onCompleted={() => {
-                      clearCart();
-                      setStep(2);
-                    }}
+                    onConfirmed={() => setPaid(true)}
+                    onLeave={clearCart}
                     onError={setPaymentError}
                   />
                 </div>
@@ -452,7 +463,7 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
                     {method.eta}
                   </p>
                   <p className="mt-3 text-[12.5px] text-ink-300">
-                    Card payment — taken on Stripe&#39;s secure page
+                    Card payment — processed securely by Stripe
                   </p>
                   {promo && discountCents > 0 && (
                     <p className="mt-3 text-[12.5px]">

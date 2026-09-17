@@ -1,31 +1,151 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { loadStripe, type Stripe, type StripeElements } from "@stripe/stripe-js";
+import {
+  loadStripe,
+  type Stripe,
+  type StripeCheckoutElementsSdk,
+} from "@stripe/stripe-js";
+
+import { PaymentOverlay } from "./payment-overlay";
 
 let stripePromise: Promise<Stripe | null> | null = null;
 
+/* Shared constructor options — loadStripe only honours the options from the
+ * first call for a given key, so every initializer must use the same set. */
+const STRIPE_OPTIONS = {
+  /* Keep the test-mode developer side badge out of the checkout UI — it is
+     tooling for developers, not something a client should see mid-payment. */
+  developerTools: {
+    assistant: {
+      enabled: false,
+    },
+  },
+};
+
 /**
- * Stripe's Payment Element, mounted inside our own checkout page so the client
- * pays without leaving the store. Card details are typed directly into an
- * iframe Stripe hosts, so they never touch this server.
+ * Warm the Stripe.js connection early in the session. The script and its
+ * controller usually take a couple of round trips, so the checkout page
+ * starts the download the moment it mounts — by the time the client reaches
+ * the payment step the script is already loaded and shared with the element
+ * below, instead of blocking its render.
  */
+export function prepareStripe() {
+  const publishable = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
+  if (!publishable || typeof window === "undefined") return;
+  stripePromise = stripePromise ?? loadStripe(publishable, STRIPE_OPTIONS);
+  /* Attach a noop catch so an offline client never surfaces an unhandled
+     rejection before the payment step even exists. */
+  void stripePromise.catch(() => null);
+}
+
+/**
+ * Stripe's Checkout Sessions API with the Elements integration, styled to the
+ * house: the payment form is rendered as embeddable elements instead of
+ * Stripe's fixed embedded page, so canvas (linen), ink, borders and capital
+ * eyebrow labels follow the storefront theme exactly. Card details are typed
+ * into Stripe-hosted iframes and never touch this server.
+ */
+const NOVA_APPEARANCE = {
+  theme: "stripe" as const,
+  variables: {
+    colorPrimary: "#17150f",
+    colorBackground: "#fcfbf8",
+    colorText: "#17150f",
+    colorTextSecondary: "#4d4840",
+    colorTextPlaceholder: "#8c857b",
+    colorIcon: "#8c857b",
+    colorDanger: "#7c2b2b",
+    colorSuccess: "#3f7a4c",
+    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, sans-serif",
+    fontLineHeight: "1.5",
+    fontSizeBase: "13.5px",
+    fontSizeSm: "12px",
+    borderRadius: "0px",
+    spacingUnit: "4px",
+    spacingGridRow: "20px",
+  },
+  rules: {
+    ".Input": {
+      backgroundColor: "transparent",
+      border: "1px solid rgba(23,21,15,0.16)",
+      boxShadow: "none",
+      padding: "12px 14px",
+    },
+    ".Input:hover": { border: "1px solid rgba(23,21,15,0.4)" },
+    ".Input:focus": {
+      border: "1px solid #17150f",
+      boxShadow: "none",
+      outline: "none",
+    },
+    ".Input::placeholder": { color: "#8c857b" },
+    ".Label": {
+      color: "#8c857b",
+      fontSize: "10.5px",
+      fontWeight: "500",
+      letterSpacing: "0.16em",
+      textTransform: "uppercase",
+      marginBottom: "8px",
+    },
+    ".Tab": {
+      backgroundColor: "transparent",
+      border: "1px solid rgba(23,21,15,0.16)",
+      borderRadius: "0px",
+      boxShadow: "none",
+    },
+    ".Tab:hover": { border: "1px solid rgba(23,21,15,0.45)" },
+    ".Tab--selected": {
+      backgroundColor: "rgba(23,21,15,0.035)",
+      border: "1px solid #17150f",
+      borderRadius: "0px",
+      boxShadow: "none",
+    },
+    ".TabIcon": { color: "#8c857b" },
+    ".TabIcon--selected": { color: "#17150f" },
+    ".TabLabel": { fontWeight: "500", letterSpacing: "0.02em" },
+    ".Block": {
+      backgroundColor: "#f7f4ef",
+      border: "1px solid #e5ded3",
+      borderRadius: "0px",
+      boxShadow: "none",
+    },
+    ".BlockDivider": { backgroundColor: "#e5ded3" },
+    ".CheckboxInput": {
+      border: "1px solid rgba(23,21,15,0.3)",
+      borderRadius: "0px",
+    },
+    ".CheckboxInput--checked": {
+      backgroundColor: "#17150f",
+      border: "1px solid #17150f",
+    },
+    ".Error": { color: "#7c2b2b", fontSize: "12px" },
+    ".RedirectText": { color: "#4d4840", fontSize: "12.5px" },
+  },
+};
+
 export function StripeEmbedded({
   clientSecret,
   returnPath,
-  onCompleted,
+  onConfirmed,
+  onLeave,
   onError,
 }: {
   clientSecret: string;
   returnPath: string;
-  onCompleted?: () => void;
+  /** The charge went through — keep this component mounted for the popup. */
+  onConfirmed?: () => void;
+  /** Called only as the client leaves for the receipt page. */
+  onLeave?: () => void;
   onError: (message: string) => void;
 }) {
   const holderRef = useRef<HTMLDivElement>(null);
-  const elementsRef = useRef<StripeElements | null>(null);
-  const stripeRef = useRef<Stripe | null>(null);
+  const sdkRef = useRef<StripeCheckoutElementsSdk | null>(null);
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  /* The payment overlay walks through its own little flow so the client is
+     never left staring at a frozen form: processing → paid → receipt page. */
+  const [stage, setStage] = useState<"idle" | "processing" | "succeeded">("idle");
+  const [successUrl, setSuccessUrl] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -39,58 +159,145 @@ export function StripeEmbedded({
         return;
       }
 
-      stripePromise = stripePromise ?? loadStripe(publishable);
+      /* Should already be warm from prepareStripe() on the checkout page;
+         this just joins the same promise. */
+      stripePromise = stripePromise ?? loadStripe(publishable, STRIPE_OPTIONS);
       const stripe = await stripePromise;
       if (!stripe || cancelled) return;
-      stripeRef.current = stripe;
 
-      const elements = stripe.elements({
-        clientSecret,
-        appearance: {
-          theme: "stripe",
-          variables: {
-            colorPrimary: "#17150f",
-            colorBackground: "#fcfbf8",
-            colorText: "#17150f",
-            fontFamily: "system-ui, sans-serif",
-            borderRadius: "0px",
+      let sdk: StripeCheckoutElementsSdk;
+      try {
+        /* Elements-with-Checkout-Sessions: the session owns pricing and
+           payment methods, we own the look. Initialisation is synchronous —
+           a bad session throws immediately. */
+        sdk = stripe.initCheckoutElementsSdk({
+          clientSecret,
+          elementsOptions: {
+            loader: "auto",
+            appearance: NOVA_APPEARANCE,
           },
-        },
-      });
-      elementsRef.current = elements;
+        });
+      } catch {
+        if (!cancelled) {
+          onError("Could not load the secure payment form. Please try again.");
+        }
+        return;
+      }
 
-      const payment = elements.create("payment");
-      if (cancelled) return;
-      if (holderRef.current) payment.mount(holderRef.current);
-      payment.on("ready", () => setReady(true));
+      if (cancelled || !holderRef.current) return;
+      sdkRef.current = sdk;
+
+      try {
+        const payment = sdk.createPaymentElement({ layout: "tabs" });
+        payment.mount(holderRef.current);
+        payment.on("ready", () => {
+          if (!cancelled) setReady(true);
+        });
+        payment.on("loaderror", () => {
+          if (!cancelled) {
+            onError("The payment form could not load. Please refresh and try again.");
+          }
+        });
+      } catch {
+        if (!cancelled) {
+          onError("The payment form could not load. Please refresh and try again.");
+        }
+      }
     })();
 
     return () => {
       cancelled = true;
+      sdkRef.current = null;
     };
   }, [clientSecret, onError]);
 
   async function pay() {
-    const stripe = stripeRef.current;
-    const elements = elementsRef.current;
-    if (!stripe || !elements) return;
+    const sdk = sdkRef.current;
+    if (!sdk) return;
 
     setSubmitting(true);
+    setStage("processing");
     onError("");
 
-    const result = await stripe.confirmPayment({
-      elements,
-      confirmParams: { return_url: returnPath },
-    });
+    try {
+      const loaded = await sdk.loadActions();
+      if (loaded.type !== "success") {
+        onError("Payments could not be initialised — please try again.");
+        setSubmitting(false);
+        setStage("idle");
+        return;
+      }
 
-    /* A redirect means success; anything else is a message for the client. */
-    if (result.error) {
-      onError(result.error.message ?? "Payment could not be completed.");
+      /* `if_required`: cards that need no extra step settle in place and we
+         move on ourselves; anything needing a redirect (3-D Secure, wallets,
+         bank apps) leaves for the provider and returns via the session's
+         return_url. Note: confirm() rejects if returnUrl is passed here —
+         the Checkout Session already owns it (set at creation, with the
+         {CHECKOUT_SESSION_ID} template Stripe substitutes). */
+      const confirmation = await loaded.actions.confirm({
+        redirect: "if_required",
+      });
+
+      if (confirmation.type === "error") {
+        console.error("[nova] checkout confirm rejected:", confirmation.error);
+        const failure = confirmation.error;
+        onError(
+          failure.code === "paymentFailed"
+            ? `${failure.message}${
+                failure.paymentFailed.declineCode
+                  ? ` (${failure.paymentFailed.declineCode})`
+                  : ""
+              }`
+            : failure.message || "Payment could not be completed.",
+        );
+        setSubmitting(false);
+        setStage("idle");
+        return;
+      }
+
+      /* Tell the page the charge succeeded, but do NOT empty the bag yet:
+         clearing it here would re-render the checkout into its empty state,
+         unmount this component and take the success popup with it. The bag
+         is emptied as the client leaves for the receipt instead. */
+      onConfirmed?.();
+      /* Prefer the session id Stripe just returned over the client-secret
+         prefix — same value, but this cannot drift if the secret format
+         ever changes. */
+      const sessionId = confirmation.session.id;
+      const destination = sessionId
+        ? `${window.location.origin}/checkout/success?session_id=${sessionId}`
+        : returnPath;
+
+      /* Confirm the good news in place first; the receipt page is one click
+         away rather than an abrupt redirect. */
+      setSuccessUrl(destination);
+      setStage("succeeded");
+    } catch (thrown) {
+      /* Keep the real reason visible — Stripe usually resolves typed errors,
+         so a throw here means something environmental (frame messaging,
+         network) that we need to see to fix. */
+      console.error("[nova] checkout confirm threw:", thrown);
+      const detail =
+        thrown instanceof Error
+          ? thrown.message || thrown.name
+          : String(thrown);
+      onError(
+        detail
+          ? `Payment could not be completed — ${detail}`
+          : "Payment could not be completed. Please try again.",
+      );
       setSubmitting(false);
-      return;
+      setStage("idle");
     }
+  }
 
-    onCompleted?.();
+  function openReceipt() {
+    if (!successUrl) return;
+    /* Now the bag can be emptied: we are leaving this page, so nothing can
+       unmount the popup mid-farewell. */
+    onLeave?.();
+    /* Replace, so the back button cannot return to a spent payment form. */
+    window.location.replace(successUrl);
   }
 
   return (
@@ -102,7 +309,7 @@ export function StripeEmbedded({
         </div>
       )}
 
-      <div ref={holderRef} />
+      <div className="border border-sand bg-linen p-5 md:p-6" ref={holderRef} />
 
       <button
         type="button"
@@ -116,8 +323,12 @@ export function StripeEmbedded({
       </button>
 
       <p className="text-center text-[11.5px] leading-relaxed text-ink-300">
-        Card details are entered into Stripe&#39;s secure form and never reach this store.
+        Card details are entered into Stripe&#39;s secure fields and never reach this store.
       </p>
+
+      {/* The processing/success popup lives at page level through a portal,
+          so it covers the whole page rather than the payment column. */}
+      <PaymentOverlay stage={stage} successUrl={successUrl} onProceed={openReceipt} />
     </div>
   );
 }

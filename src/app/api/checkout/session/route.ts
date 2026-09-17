@@ -123,30 +123,53 @@ export async function POST(request: Request) {
   const base = origin(request);
 
   try {
-    /* A PaymentIntent lets the payment form live inside our own page: the
-       client types card details into Stripe's Payment Element and confirms
-       without ever leaving the store. */
-    const intent = await stripe.paymentIntents.create({
-      amount: order.order.totalCents,
-      currency: "usd",
-      receipt_email: email,
-      automatic_payment_methods: { enabled: true },
+    /* The newest Checkout Sessions API with the Elements integration: Stripe
+       supplies the payment form (cards, wallets, local methods, adaptive
+       pricing) as embeddable elements, so the storefront can restyle every
+       pixel to match its own theme — unlike the fixed `embedded_page` UI.
+       The amount is priced server-side, so the client can never change it. */
+    const session = await stripe.checkout.sessions.create({
+      ui_mode: "elements",
+      mode: "payment",
+      customer_email: email,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: order.order.totalCents,
+            product_data: {
+              name: `NOVA order ${order.order.orderNumber}`,
+              description: `${items.reduce((count, item) => count + item.quantity, 0)} item(s) · duties & taxes included`,
+            },
+          },
+        },
+      ],
       metadata: { orderId: String(order.order.id), orderNumber: order.order.orderNumber },
+      payment_intent_data: {
+        metadata: { orderId: String(order.order.id), orderNumber: order.order.orderNumber },
+        receipt_email: email,
+      },
+      return_url: `${base}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     });
 
-    /* Remember which intent is paying for this order. */
+    /* Remember which session is paying for this order. */
     await db
       .update(orders)
-      .set({ trackingNumber: `stripe:${intent.id}` })
+      .set({ trackingNumber: `stripe:${session.id}` })
       .where(eq(orders.id, order.order.id));
+
+    if (!session.client_secret) {
+      throw new Error("Stripe did not issue a client secret.");
+    }
 
     return NextResponse.json({
       ok: true,
-      clientSecret: intent.client_secret,
+      clientSecret: session.client_secret,
       orderId: order.order.id,
     });
   } catch (error) {
-    console.error("[nova] payment intent failed", error);
+    console.error("[nova] checkout session failed", error);
     /* Leave the order pending; the client can retry. */
     return NextResponse.json(
       { ok: false, error: "Could not start the payment. Please try again." },

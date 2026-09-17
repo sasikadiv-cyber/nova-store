@@ -2,9 +2,19 @@ import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db } from "@/db";
-import { contactMessages, orderEvents, orders, reviews } from "@/db/schema";
+import {
+  contactMessages,
+  orderEvents,
+  orderItems,
+  orders,
+  products,
+  reviews,
+} from "@/db/schema";
 import { getCurrentAdmin } from "@/lib/auth";
 import { getCurrentCustomer } from "@/lib/customer-auth";
+import { statusLabel } from "@/lib/customer-queries";
+import { formatUsd } from "@/lib/currency";
+import { isDispatchTracking } from "@/lib/tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -15,22 +25,31 @@ export type NotificationItem = {
   detail: string;
   href: string;
   createdAt: string;
-  unread: boolean;
+  /** Needs the owner/client to actually do something. */
+  actionable: boolean;
 };
 
 const DAY = 86_400_000;
 
+function plural(count: number, word: string) {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
 /**
  * Activity feed for the console and the client account.
  *
- * Nothing is stored: the feed is derived from the orders, order events,
- * reviews and contact messages that already exist, so there is no second copy
- * of anything to fall out of sync. "Unread" is a browser-side marker, kept in
- * local storage against the newest item the user has seen.
+ * Every entry is derived from a row that really exists — orders, order
+ * events, reviews and contact messages — and carries that row's own detail
+ * (what was bought, what it cost, who wrote it, where the parcel is). There
+ * is no second copy of anything to fall out of sync, and nothing is
+ * fabricated: an empty store produces an empty feed.
+ *
+ * Read state is the caller's business: the client sends the timestamp it
+ * last acknowledged and anything newer is flagged unread.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const days = Math.min(90, Math.max(1, Number(url.searchParams.get("days") ?? 30)));
+  const days = Math.min(365, Math.max(1, Number(url.searchParams.get("days") ?? 30)));
   const kind = url.searchParams.get("kind");
   const since = new Date(Date.now() - days * DAY);
 
@@ -44,6 +63,7 @@ export async function GET(request: Request) {
   const items: NotificationItem[] = [];
 
   if (admin) {
+    /* ------------------------------------------------- orders placed */
     const recentOrders = await db
       .select()
       .from(orders)
@@ -51,21 +71,91 @@ export async function GET(request: Request) {
       .orderBy(desc(orders.createdAt))
       .limit(40);
 
+    const orderIds = recentOrders.map((order) => order.id);
+    const lines = orderIds.length
+      ? await db.select().from(orderItems).where(inArray(orderItems.orderId, orderIds))
+      : [];
+
     for (const order of recentOrders) {
+      const mine = lines.filter((line) => line.orderId === order.id);
+      const pieces = mine.reduce((count, line) => count + line.quantity, 0);
+      /* Name the actual goods, so the owner knows what to pick without
+         opening the order. */
+      const names = mine.map((line) => line.name);
+      const summary =
+        names.length === 0
+          ? ""
+          : names.length <= 2
+            ? names.join(" + ")
+            : `${names[0]} + ${names.length - 1} more`;
+
       items.push({
         id: `order-${order.id}`,
         kind: "order",
-        title: `New order ${order.orderNumber}`,
-        detail: `${order.fullName} · ${(order.totalCents / 100).toFixed(2)} USD · ${order.status.replace(/_/g, " ")}`,
+        title: `${order.orderNumber} · ${formatUsd(order.totalCents)}`,
+        detail: [
+          order.fullName,
+          order.country,
+          pieces ? plural(pieces, "piece") : null,
+          summary,
+          statusLabel(order.status),
+        ]
+          .filter(Boolean)
+          .join(" · "),
         href: "/admin/orders",
         createdAt: order.createdAt.toISOString(),
-        unread: order.status === "confirmed",
+        /* Paid but not yet dispatched is the owner's queue. */
+        actionable: order.status === "confirmed" || order.status === "payment_review",
       });
     }
 
+    /* ------------------------------------------- dispatch milestones */
+    const events = orderIds.length
+      ? await db
+          .select()
+          .from(orderEvents)
+          .where(
+            and(inArray(orderEvents.orderId, orderIds), gte(orderEvents.createdAt, since)),
+          )
+          .orderBy(desc(orderEvents.createdAt))
+          .limit(60)
+      : [];
+
+    for (const event of events) {
+      if (event.status !== "shipped" && event.status !== "delivered") continue;
+      const order = recentOrders.find((entry) => entry.id === event.orderId);
+      if (!order) continue;
+      items.push({
+        id: `admin-event-${event.id}`,
+        kind: "delivery",
+        title: `${order.orderNumber} ${statusLabel(event.status).toLowerCase()}`,
+        detail: [
+          order.fullName,
+          isDispatchTracking(order.trackingNumber) ? order.trackingNumber : null,
+          event.note,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        href: "/admin/orders",
+        createdAt: event.createdAt.toISOString(),
+        actionable: false,
+      });
+    }
+
+    /* ------------------------------------------------ client reviews */
     const recentReviews = await db
-      .select()
+      .select({
+        id: reviews.id,
+        rating: reviews.rating,
+        title: reviews.title,
+        body: reviews.body,
+        author: reviews.author,
+        location: reviews.location,
+        createdAt: reviews.createdAt,
+        productName: products.name,
+      })
       .from(reviews)
+      .leftJoin(products, eq(reviews.productId, products.id))
       .where(gte(reviews.createdAt, since))
       .orderBy(desc(reviews.createdAt))
       .limit(40);
@@ -74,14 +164,23 @@ export async function GET(request: Request) {
       items.push({
         id: `review-${review.id}`,
         kind: "review",
-        title: `New ${review.rating}★ review`,
-        detail: `${review.title} — ${review.author}`,
+        title: `${review.rating}★ on ${review.productName ?? "a product"}`,
+        detail: [
+          review.title,
+          review.author,
+          review.location,
+          review.body.slice(0, 70),
+        ]
+          .filter(Boolean)
+          .join(" · "),
         href: "/admin/reviews",
         createdAt: review.createdAt.toISOString(),
-        unread: true,
+        /* Low scores deserve a reply. */
+        actionable: review.rating <= 3,
       });
     }
 
+    /* ----------------------------------------------- client messages */
     const recentMessages = await db
       .select()
       .from(contactMessages)
@@ -93,11 +192,18 @@ export async function GET(request: Request) {
       items.push({
         id: `message-${message.id}`,
         kind: "message",
-        title: `Message from ${message.name}`,
-        detail: message.subject || message.message.slice(0, 80),
+        title: message.subject || `Message from ${message.name}`,
+        detail: [
+          message.name,
+          message.email,
+          message.message.slice(0, 80),
+          message.handled ? "Handled" : "Awaiting reply",
+        ]
+          .filter(Boolean)
+          .join(" · "),
         href: "/admin/messages",
         createdAt: message.createdAt.toISOString(),
-        unread: !message.handled,
+        actionable: !message.handled,
       });
     }
   } else if (customer) {
@@ -109,58 +215,108 @@ export async function GET(request: Request) {
       .limit(20);
 
     const ids = myOrders.map((order) => order.id);
-    const events =
-      ids.length > 0
-        ? await db
-            .select()
-            .from(orderEvents)
-            .where(and(inArray(orderEvents.orderId, ids), gte(orderEvents.createdAt, since)))
-            .orderBy(desc(orderEvents.createdAt))
-            .limit(60)
-        : [];
+    const lines = ids.length
+      ? await db.select().from(orderItems).where(inArray(orderItems.orderId, ids))
+      : [];
+
+    /* Which of their own pieces the client has already written about, so a
+       review prompt is never shown twice. */
+    const written = ids.length
+      ? await db
+          .select({ productId: reviews.productId })
+          .from(reviews)
+          .where(eq(reviews.customerId, customer.id))
+      : [];
+    const reviewed = new Set(written.map((row) => row.productId));
+
+    const events = ids.length
+      ? await db
+          .select()
+          .from(orderEvents)
+          .where(and(inArray(orderEvents.orderId, ids), gte(orderEvents.createdAt, since)))
+          .orderBy(desc(orderEvents.createdAt))
+          .limit(60)
+      : [];
 
     for (const event of events) {
       const order = myOrders.find((entry) => entry.id === event.orderId);
       if (!order) continue;
+      const shipped = event.status === "shipped" || event.status === "delivered";
       items.push({
         id: `event-${event.id}`,
         kind: "delivery",
-        title: `${order.orderNumber} — ${event.status.replace(/_/g, " ")}`,
-        detail: event.note || `Status updated to ${event.status.replace(/_/g, " ")}.`,
+        title: `${order.orderNumber} — ${statusLabel(event.status)}`,
+        detail: [
+          event.note,
+          shipped && isDispatchTracking(order.trackingNumber)
+            ? `Tracking ${order.trackingNumber}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
         href: `/account/orders/${order.id}`,
         createdAt: event.createdAt.toISOString(),
-        unread: event.status === "delivered",
+        actionable: false,
       });
     }
 
+    /* Order receipts, with what was actually bought. */
+    for (const order of myOrders) {
+      const mine = lines.filter((line) => line.orderId === order.id);
+      const pieces = mine.reduce((count, line) => count + line.quantity, 0);
+      items.push({
+        id: `my-order-${order.id}`,
+        kind: "order",
+        title: `${order.orderNumber} · ${formatUsd(order.totalCents)}`,
+        detail: [
+          pieces ? plural(pieces, "piece") : null,
+          mine[0]?.name,
+          statusLabel(order.status),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        href: `/account/orders/${order.id}`,
+        createdAt: order.createdAt.toISOString(),
+        actionable: false,
+      });
+    }
+
+    /* Review prompts — only for delivered pieces still unreviewed. */
     for (const order of myOrders) {
       if (order.status !== "delivered") continue;
+      const pending = lines.filter(
+        (line) => line.orderId === order.id && !reviewed.has(line.productId),
+      );
+      if (pending.length === 0) continue;
+
+      const latest = events.find(
+        (event) => event.orderId === order.id && event.status === "delivered",
+      );
+
       items.push({
         id: `review-prompt-${order.id}`,
         kind: "review",
-        title: "Write a review",
-        detail: `${order.orderNumber} was delivered — tell other clients what you thought.`,
+        title: `Review your ${pending[0].name}`,
+        detail:
+          pending.length > 1
+            ? `${order.orderNumber} delivered · ${plural(pending.length, "piece")} awaiting your review`
+            : `${order.orderNumber} delivered · tell other clients what you thought`,
         href: `/account/orders/${order.id}`,
-        createdAt: order.createdAt.toISOString(),
-        unread: true,
+        createdAt: (latest?.createdAt ?? order.createdAt).toISOString(),
+        actionable: true,
       });
     }
-  }
-
-  if (kind && kind !== "all") {
-    const filtered = items.filter((item) => item.kind === kind);
-    return NextResponse.json({
-      ok: true,
-      notifications: filtered,
-      scope: admin ? "admin" : "customer",
-    });
   }
 
   items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
+  const scoped = kind && kind !== "all" ? items.filter((item) => item.kind === kind) : items;
+
   return NextResponse.json({
     ok: true,
-    notifications: items.slice(0, 60),
+    notifications: scoped.slice(0, 60),
     scope: admin ? "admin" : "customer",
+    /* Lets the client mark everything currently visible as read. */
+    newestAt: items[0]?.createdAt ?? null,
   });
 }
