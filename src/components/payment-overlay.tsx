@@ -24,8 +24,10 @@ export function PaymentOverlay({
 }) {
   const [mounted, setMounted] = useState(false);
 
+  /* Mount flag flips on the next frame so the portal only renders client-side. */
   useEffect(() => {
-    setMounted(true);
+    const frame = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   /* Keep the page behind still while the payment is being confirmed. */

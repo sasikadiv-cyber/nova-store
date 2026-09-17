@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { collections, products, reviews } from "@/db/schema";
+import { collections, discountCodes, giftCards, products, reviews } from "@/db/schema";
 import { seedCollections, seedProducts } from "./seed-data";
 
 function average(values: number[]) {
@@ -100,4 +100,45 @@ export async function seedDatabase() {
   }
 
   return { products: idBySlug.size, reviews: reviewRows.length };
+}
+
+/**
+ * Demo promotional codes and a demo gift card, so discount features work on a
+ * fresh deployment without manual console setup. Idempotent and independent
+ * of the catalogue seed — a store that already has products still gets these.
+ */
+export async function seedStoreExtras() {
+  await db
+    .insert(discountCodes)
+    .values([
+      {
+        code: "WELCOME10",
+        label: "Welcome offer — 10% off your first order",
+        type: "percent",
+        value: 10,
+        scope: "all",
+        minSubtotalCents: 0,
+      },
+      {
+        code: "ATELIER20",
+        label: "Atelier preview — 20% off orders over $200",
+        type: "percent",
+        value: 20,
+        scope: "all",
+        minSubtotalCents: 20000,
+      },
+    ])
+    .onConflictDoNothing({ target: discountCodes.code });
+
+  await db
+    .insert(giftCards)
+    .values([
+      {
+        code: "NOVA-GIFT-5000",
+        initialCents: 5000,
+        balanceCents: 5000,
+        note: "Demo gift card",
+      },
+    ])
+    .onConflictDoNothing({ target: giftCards.code });
 }

@@ -15,7 +15,7 @@ import { cached, invalidateStock, TAGS, productTag } from "./cache";
 import { evaluateDiscount, recordRedemption } from "./discounts";
 import { evaluateGiftCard, redeemGiftCard } from "./gift-cards";
 import { decrementStock } from "./variants";
-import { seedDatabase } from "./seed";
+import { seedDatabase, seedStoreExtras } from "./seed";
 
 export type SortKey = "featured" | "newest" | "price-asc" | "price-desc" | "rating" | "best-selling";
 
@@ -55,6 +55,9 @@ export async function ensureSeeded() {
         if (count === 0) {
           await seedDatabase();
         }
+        /* Demo codes and gift card are seeded even when the catalogue was
+           already present, so upgrades of existing stores get them too. */
+        await seedStoreExtras();
       } catch (error) {
         console.error("[nova] seeding skipped:", error);
         seedPromise = null;

@@ -53,8 +53,17 @@ export async function GET(request: Request) {
   const kind = url.searchParams.get("kind");
   const since = new Date(Date.now() - days * DAY);
 
-  const admin = await getCurrentAdmin();
-  const customer = admin ? null : await getCurrentCustomer();
+  /* The feed is scoped by where the caller is — the console or the client
+     account — never by "an admin cookie happens to exist". One browser often
+     holds both sessions (the owner testing their own store), and without an
+     explicit scope both areas were shown the same console feed. */
+  const scopeParam = url.searchParams.get("scope");
+  const requestedScope =
+    scopeParam === "admin" || scopeParam === "customer" ? scopeParam : null;
+
+  const admin = requestedScope === "customer" ? null : await getCurrentAdmin();
+  const customer =
+    requestedScope === "admin" || admin ? null : await getCurrentCustomer();
 
   if (!admin && !customer) {
     return NextResponse.json({ ok: true, notifications: [], scope: "anonymous" });

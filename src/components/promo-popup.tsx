@@ -35,13 +35,20 @@ export function PromoPopup({ content }: { content: PromoPopupContent }) {
 
   const pathname = usePathname();
 
+  /* Navigating away from home closes the card — tracked during render
+     (React's recommended pattern) instead of a post-render effect. */
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
+    setOpen(false);
+  }
+
   useEffect(() => {
     let timer: number | undefined;
     let onConsent: (() => void) | null = null;
 
     /* Greeting belongs to the home page only. */
     if (pathname !== "/") {
-      setOpen(false);
       return;
     }
 

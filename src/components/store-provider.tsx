@@ -121,39 +121,45 @@ export function StoreProvider({
   const [hydrated, setHydrated] = useState(false);
   const scrollLockRef = useRef(false);
 
+  /* Reads the persisted bag after the frame paints, so the first client
+     render matches the server exactly (no hydration mismatch) and the cart
+     state applies in one scheduled update instead of cascading renders. */
   useEffect(() => {
-    try {
-      const rawCart = window.localStorage.getItem(CART_KEY);
-      if (rawCart) {
-        const parsed = JSON.parse(rawCart) as CartLine[];
-        if (Array.isArray(parsed)) setLines(parsed);
-      }
-      const rawPromo = window.localStorage.getItem(PROMO_KEY);
-      if (rawPromo) {
-        try {
-          const parsed = JSON.parse(rawPromo) as Promo;
-          if (parsed && typeof parsed.code === "string" && parsed.discountCents > 0) {
-            setPromo(parsed);
-            setPromoStatus("applied");
-          }
-        } catch {
-          /* ignore */
+    const frame = requestAnimationFrame(() => {
+      try {
+        const rawCart = window.localStorage.getItem(CART_KEY);
+        if (rawCart) {
+          const parsed = JSON.parse(rawCart) as CartLine[];
+          if (Array.isArray(parsed)) setLines(parsed);
         }
+        const rawPromo = window.localStorage.getItem(PROMO_KEY);
+        if (rawPromo) {
+          try {
+            const parsed = JSON.parse(rawPromo) as Promo;
+            if (parsed && typeof parsed.code === "string" && parsed.discountCents > 0) {
+              setPromo(parsed);
+              setPromoStatus("applied");
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+        const rawCurrency = window.localStorage.getItem(CURRENCY_KEY);
+        if (rawCurrency && /^[A-Z]{3}$/.test(rawCurrency)) {
+          setCurrencyState(rawCurrency as CurrencyCode);
+        }
+        /* Light is the storefront default. Only an explicitly saved choice — or an
+           explicit toggle — switches to dark. */
+        const storedTheme = window.localStorage.getItem(THEME_KEY);
+        const nextTheme: Theme = storedTheme === "dark" ? "dark" : "light";
+        setThemeState(nextTheme);
+        applyTheme(nextTheme);
+      } catch {
+        /* ignore malformed storage */
       }
-      const rawCurrency = window.localStorage.getItem(CURRENCY_KEY);
-      if (rawCurrency && /^[A-Z]{3}$/.test(rawCurrency)) {
-        setCurrencyState(rawCurrency as CurrencyCode);
-      }
-      /* Light is the storefront default. Only an explicitly saved choice — or an
-         explicit toggle — switches to dark. */
-      const storedTheme = window.localStorage.getItem(THEME_KEY);
-      const nextTheme: Theme = storedTheme === "dark" ? "dark" : "light";
-      setThemeState(nextTheme);
-      applyTheme(nextTheme);
-    } catch {
-      /* ignore malformed storage */
-    }
-    setHydrated(true);
+      setHydrated(true);
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, eq, gte } from "drizzle-orm";
+import { desc, eq, gte, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { products, reviews } from "@/db/schema";
@@ -16,8 +16,7 @@ export default async function AdminReviews({
 }) {
   const params = await searchParams;
   const days = Math.min(365, Math.max(1, Number(typeof params.days === "string" ? params.days : 90)));
-  const since = new Date(Date.now() - days * 86_400_000);
-
+  /* Cutoff computed on the database clock, keeping render time-free. */
   const rows = await db
     .select({
       review: reviews,
@@ -26,7 +25,7 @@ export default async function AdminReviews({
     })
     .from(reviews)
     .innerJoin(products, eq(reviews.productId, products.id))
-    .where(gte(reviews.createdAt, since))
+    .where(gte(reviews.createdAt, sql<Date>`now() - make_interval(days => ${days})`))
     .orderBy(desc(reviews.createdAt))
     .limit(120);
 

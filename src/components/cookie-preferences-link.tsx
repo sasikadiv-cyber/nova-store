@@ -8,8 +8,11 @@ import { readConsent, saveConsent, type ConsentChoice } from "./cookie-consent";
 export function CookiePreferencesLink() {
   const [choice, setChoice] = useState<ConsentChoice | null>(null);
 
+  /* Reads the stored choice after the frame paints, keeping the first client
+     render identical to the server output. */
   useEffect(() => {
-    setChoice(readConsent());
+    const frame = requestAnimationFrame(() => setChoice(readConsent()));
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   return (

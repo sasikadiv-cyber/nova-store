@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { AdminLoginForm } from "@/components/admin/login-form";
 import { CollapsibleNav } from "@/components/collapsible-nav";
-import { NotificationBell, NotificationFeed } from "@/components/notification-bell";
+import { NotificationBell } from "@/components/notification-bell";
 import { getCurrentAdmin } from "@/lib/auth";
 import { logoutAction } from "./actions";
 import { SubmitButton } from "@/components/admin/submit-button";
@@ -17,6 +17,7 @@ const BASE_NAV = [
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/reviews", label: "Reviews" },
   { href: "/admin/messages", label: "Messages" },
+  { href: "/admin/notifications", label: "Notifications" },
 ];
 
 /* Stock managers additionally run the catalogue. */
@@ -123,25 +124,9 @@ export default async function AdminLayout({
           </div>
 
           <div className="mx-auto w-full max-w-[1320px] px-5 py-8 md:px-8 md:py-10">
-            <div className="space-y-10">
-              {children}
-
-              {/* ---------------------------------------- notifications */}
-              <section id="notifications" className="scroll-mt-24">
-                <div className="border-b border-sand pb-5">
-                  <p className="eyebrow text-sage">Activity</p>
-                  <h2 className="mt-2 text-2xl">Notifications</h2>
-                  <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-300">
-                    New orders, reviews and client messages, filtered by kind and period.
-                  </p>
-                </div>
-                <div className="pt-4">
-                  <NotificationFeed />
-                </div>
-              </section>
-            </div>
+            {children}
           </div>
-          <NotificationBell />
+          <NotificationBell scope="admin" viewAllHref="/admin/notifications" />
         </div>
       </div>
     </div>

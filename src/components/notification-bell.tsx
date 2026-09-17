@@ -13,31 +13,39 @@ type Item = {
   actionable: boolean;
 };
 
-const SEEN_KEY = "nova.notifications.readAt";
+/** Which audience the feed belongs to — console or client account. */
+export type NotificationScope = "admin" | "customer";
 
-/** The moment the user last acknowledged the feed, as epoch ms. */
-function readLastSeen() {
+/* Read and cleared state is kept per scope, so the owner's console and the
+   client account never share markers on the same browser. */
+function readKey(scope: NotificationScope) {
+  return `nova.notifications.readAt.${scope}`;
+}
+
+/* Quick view and full section keep SEPARATE clear markers: clearing the bell
+   popover must never wipe the notifications page, and vice versa. */
+function clearedKey(scope: NotificationScope, view: "quick" | "full") {
+  return `nova.notifications.clearedAt.${scope}.${view}`;
+}
+
+function readStored(key: string) {
   try {
-    return Number(window.localStorage.getItem(SEEN_KEY) ?? 0) || 0;
+    return Number(window.localStorage.getItem(key) ?? 0) || 0;
   } catch {
     return 0;
   }
 }
 
-function writeLastSeen(iso: string | null) {
+function writeStored(key: string, value: number) {
   try {
-    window.localStorage.setItem(
-      SEEN_KEY,
-      String(iso ? new Date(iso).getTime() : Date.now()),
-    );
+    window.localStorage.setItem(key, String(value));
   } catch {
     /* Private mode — the badge simply stays live. */
   }
 }
 
-/** Anything created after the last acknowledgement is genuinely new. */
-function countUnseen(items: Item[], lastSeen: number) {
-  return items.filter((item) => new Date(item.createdAt).getTime() > lastSeen).length;
+function ts(iso: string) {
+  return new Date(iso).getTime();
 }
 
 const KIND_META: Record<string, { label: string; icon: React.ReactNode }> = {
@@ -85,7 +93,7 @@ const RANGES = [
 ] as const;
 
 function relative(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = Date.now() - ts(iso);
   const minutes = Math.round(diff / 60000);
   if (minutes < 1) return "now";
   if (minutes < 60) return `${minutes}m`;
@@ -95,26 +103,37 @@ function relative(iso: string) {
 }
 
 /**
- * Activity, on the right.
- *
- * The floating bell is the quick entry point; the same feed is embedded as a
- * full Notifications section on the page, so it can be read properly rather
- * than only in a small popover.
+ * The activity feed for one audience (`scope`). The console and the client
+ * account each see only their own stream — the API is told which scope to
+ * serve, and read/cleared markers live under scope-specific storage keys.
  */
-export function NotificationFeed({ compact = false }: { compact?: boolean }) {
+export function NotificationFeed({
+  scope,
+  compact = false,
+}: {
+  scope: NotificationScope;
+  compact?: boolean;
+}) {
   const [items, setItems] = useState<Item[]>([]);
   const [kind, setKind] = useState<string>("all");
   const [days, setDays] = useState<string>("30");
   const [loading, setLoading] = useState(true);
   const [lastSeen, setLastSeen] = useState(0);
+  const [clearedAt, setClearedAt] = useState(0);
+
+  const view = compact ? "quick" : "full";
+  /* The quick view is a glance at the last 7 days only; the full section
+     keeps the selectable 7/30/90-day ranges. */
+  const effectiveDays = compact ? "7" : days;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/notifications?kind=${kind}&days=${days}`);
+      const response = await fetch(
+        `/api/notifications?scope=${scope}&kind=${compact ? "all" : kind}&days=${effectiveDays}`,
+      );
       const payload = (await response.json()) as {
         notifications?: Item[];
-        newestAt?: string | null;
       };
       setItems(payload.notifications ?? []);
     } catch {
@@ -122,91 +141,123 @@ export function NotificationFeed({ compact = false }: { compact?: boolean }) {
     } finally {
       setLoading(false);
     }
-  }, [kind, days]);
+  }, [scope, compact, kind, effectiveDays]);
 
+  /* Storage lives only in the browser, so it is read after the frame paints
+     and the first client render matches the server exactly. */
   useEffect(() => {
-    setLastSeen(readLastSeen());
-  }, []);
+    const frame = requestAnimationFrame(() => {
+      setLastSeen(readStored(readKey(scope)));
+      setClearedAt(readStored(clearedKey(scope, view)));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scope, view]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const unread = countUnseen(items, lastSeen);
+  /* Cleared notifications leave the list everywhere; anything newer than the
+     last acknowledgement is genuinely new. */
+  const visible = items.filter((item) => ts(item.createdAt) > clearedAt);
+  const unread = visible.filter((item) => ts(item.createdAt) > lastSeen).length;
 
-  /* Reading the full feed is the acknowledgement — mark everything shown as
-     seen so the badge reflects what is actually new next time. */
   function markAllRead() {
-    const newest = items[0]?.createdAt ?? null;
-    writeLastSeen(newest);
-    setLastSeen(newest ? new Date(newest).getTime() : Date.now());
+    const now = Date.now();
+    const newest = visible[0] ? ts(visible[0].createdAt) : now;
+    writeStored(readKey(scope), newest);
+    setLastSeen(newest);
   }
+
+  function clearAll() {
+    const now = Date.now();
+    /* Per-view clear: the bell's "Clear all" empties only the quick view and
+       leaves the full notifications section untouched. */
+    writeStored(clearedKey(scope, view), now);
+    writeStored(readKey(scope), now);
+    setClearedAt(now);
+    setLastSeen(now);
+  }
+
+  const emptyText =
+    clearedAt > 0 ? "All caught up — nothing new." : "Nothing in this period.";
 
   return (
     <div>
-      {/* ---------------------------------------------------------- filters */}
-      <div className="flex flex-wrap items-center gap-4 border-b border-sand pb-4">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {KINDS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setKind(value)}
-              className={`border px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] transition-colors ${
-                kind === value
-                  ? "border-ink bg-ink text-bone"
-                  : "border-ink/15 text-ink-400 hover:border-ink/45 hover:text-ink"
-              }`}
-            >
-              {value === "all" ? "All" : KIND_META[value]?.label ?? value}
-            </button>
-          ))}
-        </div>
+      {/* ---------------------------------------------- filters (full page) */}
+      {!compact && (
+        <div className="flex flex-wrap items-center gap-4 border-b border-sand pb-4">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {KINDS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setKind(value)}
+                className={`border px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] transition-colors ${
+                  kind === value
+                    ? "border-ink bg-ink text-bone"
+                    : "border-ink/15 text-ink-400 hover:border-ink/45 hover:text-ink"
+                }`}
+              >
+                {value === "all" ? "All" : KIND_META[value]?.label ?? value}
+              </button>
+            ))}
+          </div>
 
-        <span className="ml-auto flex items-center gap-1.5">
-          {RANGES.map((range) => (
+          <span className="ml-auto flex items-center gap-1.5">
+            {RANGES.map((range) => (
+              <button
+                key={range.value}
+                type="button"
+                onClick={() => setDays(range.value)}
+                className={`border px-2.5 py-1.5 text-[11px] transition-colors ${
+                  days === range.value
+                    ? "border-brass bg-brass/15 text-ink"
+                    : "border-ink/15 text-ink-400 hover:border-brass/60"
+                }`}
+              >
+                {range.label}
+              </button>
+            ))}
+            {unread > 0 && (
+              <button
+                type="button"
+                onClick={markAllRead}
+                className="border border-brass/50 bg-brass/10 px-2.5 py-1.5 text-[11px] text-brass transition-colors hover:border-brass"
+              >
+                Mark {unread} read
+              </button>
+            )}
+            {visible.length > 0 && (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="border border-ink/15 px-2.5 py-1.5 text-[11px] text-ink-400 transition-colors hover:border-ember hover:text-ember"
+              >
+                Clear all
+              </button>
+            )}
             <button
-              key={range.value}
               type="button"
-              onClick={() => setDays(range.value)}
-              className={`border px-2.5 py-1.5 text-[11px] transition-colors ${
-                days === range.value
-                  ? "border-brass bg-brass/15 text-ink"
-                  : "border-ink/15 text-ink-400 hover:border-brass/60"
-              }`}
+              onClick={load}
+              aria-label="Refresh"
+              className="grid h-[30px] w-[30px] place-items-center border border-ink/15 text-ink-400 transition-colors hover:border-ink hover:text-ink"
             >
-              {range.label}
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                className={loading ? "animate-spin" : ""}
+              >
+                <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
+              </svg>
             </button>
-          ))}
-          {unread > 0 && (
-            <button
-              type="button"
-              onClick={markAllRead}
-              className="border border-brass/50 bg-brass/10 px-2.5 py-1.5 text-[11px] text-brass transition-colors hover:border-brass"
-            >
-              Mark {unread} read
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={load}
-            aria-label="Refresh"
-            className="grid h-[30px] w-[30px] place-items-center border border-ink/15 text-ink-400 transition-colors hover:border-ink hover:text-ink"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.9"
-              className={loading ? "animate-spin" : ""}
-            >
-              <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
-            </svg>
-          </button>
-        </span>
-      </div>
+          </span>
+        </div>
+      )}
 
       {/* -------------------------------------------------------- the feed */}
       <div className={compact ? "" : "divide-y divide-sand"}>
@@ -215,14 +266,12 @@ export function NotificationFeed({ compact = false }: { compact?: boolean }) {
             <span className="inline-block h-4 w-4 animate-spin rounded-full border border-ink/40 border-t-transparent" />
             <span className="text-[13px] text-ink-300">Loading activity…</span>
           </div>
-        ) : items.length === 0 ? (
-          <p className="py-10 text-center text-[13px] text-ink-300">
-            Nothing in this period.
-          </p>
+        ) : visible.length === 0 ? (
+          <p className="py-10 text-center text-[13px] text-ink-300">{emptyText}</p>
         ) : (
-          items.map((item) => {
+          visible.map((item) => {
             const meta = KIND_META[item.kind] ?? KIND_META.order;
-            const isNew = new Date(item.createdAt).getTime() > lastSeen;
+            const isNew = ts(item.createdAt) > lastSeen;
             return (
               <Link
                 key={item.id}
@@ -262,12 +311,39 @@ export function NotificationFeed({ compact = false }: { compact?: boolean }) {
           })
         )}
       </div>
+
+      {/* Quick-view footer: read state and the clear control the popover
+           was missing. */}
+      {compact && !loading && visible.length > 0 && (
+        <div className="flex items-center justify-between gap-3 border-t border-sand px-1 pt-3 pb-1">
+          <button
+            type="button"
+            onClick={markAllRead}
+            className="text-[11px] uppercase tracking-[0.14em] text-ink-300 transition-colors hover:text-ink"
+          >
+            Mark all read
+          </button>
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-[11px] uppercase tracking-[0.14em] text-ink-300 transition-colors hover:text-ember"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-/** Floating quick-access bell, pinned to the bottom-right. */
-export function NotificationBell() {
+/** Floating quick-access bell, pinned to the bottom-right of one area. */
+export function NotificationBell({
+  scope,
+  viewAllHref,
+}: {
+  scope: NotificationScope;
+  viewAllHref: string;
+}) {
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(0);
 
@@ -275,12 +351,17 @@ export function NotificationBell() {
     let active = true;
     (async () => {
       try {
-        const response = await fetch("/api/notifications?kind=all&days=30");
+        /* The badge mirrors the quick view, so it counts the last 7 days. */
+        const response = await fetch(`/api/notifications?scope=${scope}&kind=all&days=7`);
         const payload = (await response.json()) as { notifications?: Item[] };
         if (!active) return;
-        /* Badge counts what has arrived since the feed was last read, so it
-           empties when the owner actually reads it — not on every reload. */
-        setCount(countUnseen(payload.notifications ?? [], readLastSeen()));
+        /* Badge counts what has arrived since the quick view was last read or
+           cleared — scoped to this area, so the two audiences never mix. */
+        const items = payload.notifications ?? [];
+        const seen = readStored(readKey(scope));
+        const cleared = readStored(clearedKey(scope, "quick"));
+        const floor = Math.max(seen, cleared);
+        setCount(items.filter((item) => ts(item.createdAt) > floor).length);
       } catch {
         /* ignore */
       }
@@ -288,7 +369,7 @@ export function NotificationBell() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [scope]);
 
   return (
     <>
@@ -298,7 +379,7 @@ export function NotificationBell() {
           setOpen((value) => {
             /* Opening the popover is reading it. */
             if (!value) {
-              writeLastSeen(null);
+              writeStored(readKey(scope), Date.now());
               setCount(0);
             }
             return !value;
@@ -324,15 +405,15 @@ export function NotificationBell() {
           <div className="flex items-baseline justify-between border-b border-sand px-4 py-3">
             <p className="eyebrow text-ink-300">Recent activity</p>
             <Link
-              href="#notifications"
+              href={viewAllHref}
               onClick={() => setOpen(false)}
               className="link-underline text-[11px] uppercase tracking-[0.14em] text-ink-300"
             >
               View all
             </Link>
           </div>
-          <div className="max-h-[52vh] overflow-y-auto px-3">
-            <NotificationFeed compact />
+          <div className="max-h-[52vh] overflow-y-auto px-3 pb-2">
+            <NotificationFeed scope={scope} compact />
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, inArray, gte } from "drizzle-orm";
+import { desc, inArray, gte, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { orderItems, orders } from "@/db/schema";
@@ -20,12 +20,11 @@ export default async function AdminOrders({
 }) {
   const params = await searchParams;
   const days = Math.min(365, Math.max(1, Number(typeof params.days === "string" ? params.days : 90)));
-  const since = new Date(Date.now() - days * 86_400_000);
-
+  /* Cutoff computed on the database clock, keeping render time-free. */
   const rows = await db
     .select()
     .from(orders)
-    .where(gte(orders.createdAt, since))
+    .where(gte(orders.createdAt, sql<Date>`now() - make_interval(days => ${days})`))
     .orderBy(desc(orders.createdAt))
     .limit(100);
   const ids = rows.map((row) => row.id);

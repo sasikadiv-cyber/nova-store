@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+
 import { useEffect, useState } from "react";
 
 import { FREE_SHIPPING_THRESHOLD, useStore } from "./store-provider";
@@ -64,10 +64,8 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
     hydrated,
   } = useStore();
   const [codeInput, setCodeInput] = useState("");
-  const router = useRouter();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [demoCheckout, setDemoCheckout] = useState(false);
   const [stripeSecret, setStripeSecret] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -127,9 +125,9 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
     setStep((current) => Math.min(2, current + 1));
   };
 
-  /* Card payments run on Stripe Checkout, so card details are entered on
-     Stripe's own page and never reach this server. Without Stripe keys the
-     order falls back to the demo flow. */
+  /* Card payments run on Stripe Checkout, so card details are handled by
+     Stripe's own embedded form and never reach this server. Without Stripe
+     keys, checkout refuses politely instead of writing unpaid orders. */
   async function startStripeCheckout() {
     const response = await fetch("/api/checkout/session", {
       method: "POST",
@@ -181,41 +179,11 @@ export function CheckoutFlow({ customer = null }: { customer?: CustomerPrefill |
         return;
       }
 
-      /* Stripe must be configured — there is no demo checkout. */
+      /* Payments-only checkout: there is no demo path — the store needs its
+         Stripe keys before orders can be placed. */
       throw new Error(
-        "Card payments are not configured on this store. Add STRIPE_SECRET_KEY to enable checkout.",
+        "Online payments are not enabled on this store yet. Please try again later.",
       );
-
-      const response = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: form.email,
-          fullName: form.fullName,
-          address1: form.address1,
-          address2: form.address2,
-          city: form.city,
-          region: form.region,
-          postalCode: form.postalCode,
-          country: form.country,
-          phone: form.phone,
-          shippingMethod: form.shippingMethod,
-          discountCode: promo?.code ?? "",
-          items: lines.map((line) => ({
-            slug: line.slug,
-            size: line.size,
-            color: line.color,
-            quantity: line.quantity,
-          })),
-        }),
-      });
-
-      const payload = (await response.json()) as { ok: boolean; orderNumber?: string; error?: string };
-      if (!response.ok || !payload.ok || !payload.orderNumber) {
-        throw new Error(payload.error ?? "We could not place your order.");
-      }
-      clearCart();
-      router.push(`/checkout/success?order=${payload.orderNumber}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Something went wrong.");
       setSubmitting(false);

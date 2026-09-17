@@ -69,25 +69,32 @@ export function CookieConsent() {
      it, but closing the tab and returning does. Their last choice pre-ticks
      the boxes, and the footer link reopens it any time. */
   useEffect(() => {
-    try {
-      if (window.sessionStorage.getItem("nova.consent.shown") === "1") return;
-      window.sessionStorage.setItem("nova.consent.shown", "1");
-    } catch {
-      /* storage unavailable — still show the bar */
-    }
+    /* Greeting opens on the next frame: the first client render matches the
+       server (bar hidden) and the reveal still animates in smoothly. */
+    const frame = requestAnimationFrame(() => {
+      try {
+        if (window.sessionStorage.getItem("nova.consent.shown") === "1") return;
+        window.sessionStorage.setItem("nova.consent.shown", "1");
+      } catch {
+        /* storage unavailable — still show the bar */
+      }
 
-    const previous = readConsent();
-    setAnalytics(previous?.analytics ?? false);
-    setMarketing(previous?.marketing ?? false);
-    setCustomize(false);
-    setOpen(true);
+      const previous = readConsent();
+      setAnalytics(previous?.analytics ?? false);
+      setMarketing(previous?.marketing ?? false);
+      setCustomize(false);
+      setOpen(true);
+    });
 
     const reopen = () => {
       setCustomize(false);
       setOpen(true);
     };
     window.addEventListener("nova:open-consent", reopen);
-    return () => window.removeEventListener("nova:open-consent", reopen);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("nova:open-consent", reopen);
+    };
   }, []);
 
   if (!open) return null;

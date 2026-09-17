@@ -50,16 +50,26 @@ export function ShopControls({ facets, state }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
 
-  useEffect(() => setDraft(state), [state]);
+  /* Keep the draft in step with freshly applied filters — adjusted during
+     render, React's recommended pattern for prop-driven state resets. */
+  const [prevState, setPrevState] = useState(state);
+  if (prevState !== state) {
+    setPrevState(state);
+    setDraft(state);
+  }
 
   /* Whether the shopper keeps the desktop rail open is remembered, so the
-     shop feels the same the next time they visit. */
+     shop feels the same the next time they visit. Read after the frame
+     paints so hydration matches the server output. */
   useEffect(() => {
-    try {
-      if (window.localStorage.getItem("nova.filters.open") === "0") setFiltersOpen(false);
-    } catch {
-      /* storage unavailable — keep the rail open */
-    }
+    const frame = requestAnimationFrame(() => {
+      try {
+        if (window.localStorage.getItem("nova.filters.open") === "0") setFiltersOpen(false);
+      } catch {
+        /* storage unavailable — keep the rail open */
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   const toggleFilters = () =>

@@ -7,8 +7,8 @@ import Stripe from "stripe";
  * touch this server. That keeps the store in Stripe's simplest PCI scope
  * (SAQ-A) and means no card data is ever stored, logged or transmitted by us.
  *
- * Until STRIPE_SECRET_KEY is set the storefront keeps its demo checkout, so
- * the store still works before payments are switched on.
+ * Until STRIPE_SECRET_KEY is set, checkout stays closed with a clear message —
+ * there is no demo path that writes orders without a real payment attempt.
  */
 
 const globalForStripe = globalThis as typeof globalThis & {

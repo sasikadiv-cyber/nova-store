@@ -141,7 +141,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   { key: "popup_eyebrow", group: "popup", label: "Popup eyebrow", help: "", kind: "text", default: "Welcome to Nova" },
   { key: "popup_title", group: "popup", label: "Popup title", help: "", kind: "text", default: "Ten percent off your first order" },
   { key: "popup_body", group: "popup", label: "Popup description", help: "", kind: "multiline", default: "Join the list for early access to limited runs and a monthly note on how things are actually made." },
-  { key: "popup_code", group: "popup", label: "Popup promo code", help: "Shown as a copyable code chip. Leave blank to hide.", kind: "text", default: "NOVAWELCOME" },
+  { key: "popup_code", group: "popup", label: "Popup promo code", help: "Shown as a copyable code chip. Leave blank to hide.", kind: "text", default: "WELCOME10" },
   { key: "popup_cta_label", group: "popup", label: "Popup button label", help: "", kind: "text", default: "Start shopping" },
   { key: "popup_cta_href", group: "popup", label: "Popup button link", help: "", kind: "href", default: "/shop" },
   { key: "popup_image", group: "popup", label: "Popup image", help: "The photograph inside the popup card.", kind: "image", default: "https://images.pexels.com/photos/29865096/pexels-photo-29865096.jpeg?auto=compress&cs=tinysrgb&fit=crop&w=900&h=1200" },

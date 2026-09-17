@@ -74,8 +74,9 @@ export function Reveal({
     const node = ref.current;
     if (!node) return;
     if (typeof IntersectionObserver === "undefined") {
-      setVisible(true);
-      return;
+      /* Ancient browser: reveal on the next frame instead of a sync update. */
+      const frame = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(frame);
     }
     const observer = new IntersectionObserver(
       (entries) => {

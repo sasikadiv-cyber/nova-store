@@ -77,11 +77,15 @@ export function SiteHeader({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => {
+  /* Close any open overlay as soon as the route changes. Tracked during
+     render (React's recommended pattern) instead of a post-render effect. */
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
     setMenuOpen(false);
     setSearchOpen(false);
     setCollectionOpen(false);
-  }, [pathname]);
+  }
 
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus();
@@ -550,14 +554,18 @@ function AccountMenu({
     };
   }, [open]);
 
-  /* The shipping location is a browser preference, like the currency. */
+  /* The shipping location is a browser preference, like the currency. Read
+     after the frame paints so hydration stays in sync with the server. */
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem("nova.location");
-      if (stored && LOCATIONS.includes(stored)) setLocation(stored);
-    } catch {
-      /* storage unavailable */
-    }
+    const frame = requestAnimationFrame(() => {
+      try {
+        const stored = window.localStorage.getItem("nova.location");
+        if (stored && LOCATIONS.includes(stored)) setLocation(stored);
+      } catch {
+        /* storage unavailable */
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   /* Click outside or press Escape to close. */

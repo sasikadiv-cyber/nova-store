@@ -177,7 +177,11 @@ export function PurchasePanel({
   const [showBar, setShowBar] = useState(false);
   const [barMounted, setBarMounted] = useState(false);
 
-  useEffect(() => setBarMounted(true), []);
+  /* Mount flag flips on the next frame, letting the bar animate in. */
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setBarMounted(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   /* The purchase panel is sticky, so watch the sections that follow it:
      once the story / reviews block enters view, slide the bar in. */

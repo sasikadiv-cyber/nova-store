@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, gte } from "drizzle-orm";
+import { desc, gte, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { contactMessages } from "@/db/schema";
@@ -11,11 +11,11 @@ export const dynamic = "force-dynamic";
 export default async function AdminMessages({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
   const days = Math.min(365, Math.max(1, Number(typeof params.days === "string" ? params.days : 90)));
-  const since = new Date(Date.now() - days * 86_400_000);
+  /* Cutoff computed on the database clock, keeping render time-free. */
   const messages = await db
     .select()
     .from(contactMessages)
-    .where(gte(contactMessages.createdAt, since))
+    .where(gte(contactMessages.createdAt, sql<Date>`now() - make_interval(days => ${days})`))
     .orderBy(desc(contactMessages.createdAt))
     .limit(100);
 

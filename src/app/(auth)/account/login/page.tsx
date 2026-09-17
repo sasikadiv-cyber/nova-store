@@ -17,9 +17,11 @@ export default async function LoginPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  // Fire and forget: awaiting this would suspend the page and push the form
-  // into a streamed segment, so it would not appear in the first paint.
-  void ensureDemoCustomer();
+  /* Must be awaited: a floating promise in a server component is cancelled as
+     soon as the response finishes streaming in production, so the demo
+     account was often never created and the seeded sign-in failed. The call
+     is idempotent and a no-op once the row exists. */
+  await ensureDemoCustomer();
 
   const mode = params.mode === "signup" ? "signup" : "signin";
   /* Send the client back where they came from — typically the checkout. */
